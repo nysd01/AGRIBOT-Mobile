@@ -65,7 +65,7 @@ async function getUserRecordByEmail(email: string): Promise<UserRecord | null> {
   }
 }
 
-export async function initDB(db: any = getDatabase()): Promise<void> {
+export async function initDB(db: any): Promise<void> {
   try {
     registerDatabase(db);
 

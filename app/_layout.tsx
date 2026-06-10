@@ -1,11 +1,21 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Platform } from 'react-native';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { LogBox } from 'react-native';
 import 'react-native-reanimated';
 
+// Suppress Expo Go SDK 53 push-token warning — local notifications still work fine.
+// Remote (FCM) push was removed from Expo Go; a dev build is needed for that.
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  'expo-notifications functionality is not fully supported',
+]);
+
 import { AuthProvider } from '@/context/AuthContext';
+import { DatabaseProvider } from '@/components/DatabaseProvider';
+import { ESP32Provider } from '@/context/ESP32Context';
+import { AppModeProvider } from '@/context/AppModeContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -13,79 +23,42 @@ export const unstable_settings = {
 };
 
 /**
- * Root layout component that handles both web and native platforms.
- * - On web: Renders without SQLiteProvider (no database)
- * - On native: Dynamically loads and uses SQLiteProvider with database initialization
+ * Root layout.
+ *
+ * DatabaseProvider is platform-specific:
+ *  - Native  → DatabaseProvider.native.tsx  (expo-sqlite SQLiteProvider + schema init)
+ *  - Web     → DatabaseProvider.web.tsx     (localStorage init)
+ *
+ * Metro resolves the correct file automatically — no eval() required.
  */
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const [SQLiteProvider, setSQLiteProvider] = useState<any>(null);
-  const [dbReady, setDbReady] = useState(false);
 
-  // Initialize SQLite only on native platforms, never on web
-  useEffect(() => {
-    // Web platform: skip database entirely
-    if (Platform.OS === 'web') {
-      setDbReady(true);
-      return;
-    }
-
-    // Native platform: load SQLite dynamically
-    const initSQLite = async () => {
-      try {
-        // This import is only executed on native, not analyzed by web bundler
-        const sqlite = await (eval("import('expo-sqlite')") as Promise<any>);
-        setSQLiteProvider(() => sqlite.SQLiteProvider);
-        setDbReady(true);
-      } catch (error) {
-        console.error('Failed to initialize SQLite:', error);
-        setDbReady(true); // Continue without database on error
-      }
-    };
-
-    initSQLite();
-  }, []);
-
-  const screenConfig = (
-    <Stack>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      <Stack.Screen
-        name="modal-settings"
-        options={{
-          presentation: 'modal',
-          headerShown: false,
-          animationEnabled: true,
-        }}
-      />
-    </Stack>
+  return (
+    <DatabaseProvider>
+      <ESP32Provider>
+      <AppModeProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <AuthProvider>
+          <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            <Stack.Screen
+              name="modal-settings"
+              options={{
+                presentation: 'modal',
+                headerShown: false,
+                animationEnabled: true,
+              }}
+            />
+          </Stack>
+          <StatusBar style="auto" />
+        </AuthProvider>
+      </ThemeProvider>
+      </AppModeProvider>
+      </ESP32Provider>
+    </DatabaseProvider>
   );
-
-  const authContent = (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AuthProvider>
-        {screenConfig}
-        <StatusBar style="auto" />
-      </AuthProvider>
-    </ThemeProvider>
-  );
-
-  // Show loading while initializing on native
-  if (!dbReady) {
-    return null;
-  }
-
-  // On native with SQLite ready, wrap with SQLiteProvider
-  if (Platform.OS !== 'web' && SQLiteProvider) {
-    return (
-      <SQLiteProvider databaseName="agribot.db" useSuspense>
-        {authContent}
-      </SQLiteProvider>
-    );
-  }
-
-  // On web or native without database, render content directly
-  return authContent;
 }

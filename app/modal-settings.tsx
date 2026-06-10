@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  SafeAreaView,
   ScrollView,
   View,
   Text,
@@ -10,17 +9,75 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-import { useAuth } from '@/context/AuthContext';
+import { useAuth }    from '@/context/AuthContext';
+import { useAppMode } from '@/context/AppModeContext';
 import {
   authenticateWithBiometrics,
   clearBiometricSession,
+  getBiometricSession,
   isBiometricAvailable,
   saveBiometricSession,
 } from '@/utils/biometrics';
 import { updateBiometricEnrollment } from '@/db/database';
+
+const modeStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  card: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: '#0E1110',
+    borderWidth: 1.5,
+    borderColor: '#1E2020',
+  },
+  cardActiveLocal: {
+    borderColor: '#72F88A',
+    backgroundColor: '#0D1F12',
+  },
+  cardActiveCloud: {
+    borderColor: '#4A9AFF',
+    backgroundColor: '#071428',
+  },
+  cardDisabled: {
+    opacity: 0.4,
+  },
+  cardLabel: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  cardSub: {
+    color: '#555',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    backgroundColor: '#0a0c0b',
+  },
+  statusText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 17,
+  },
+});
 
 const settingsStyles = StyleSheet.create({
   safe: {
@@ -141,6 +198,7 @@ const settingsStyles = StyleSheet.create({
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { mode, setMode, cloudConfig, isOnline } = useAppMode();
   const [notifications, setNotifications] = useState(true);
   const [autoConnect, setAutoConnect] = useState(true);
   const [debugMode, setDebugMode] = useState(false);
@@ -153,9 +211,14 @@ export default function SettingsScreen() {
 
     const loadBiometricState = async () => {
       const supported = await isBiometricAvailable();
+      // Check BOTH the DB flag AND whether SecureStore session actually exists.
+      // If the session was wiped (app update / reinstall), show toggle as OFF
+      // so the user knows they need to re-enroll.
+      const session = await getBiometricSession();
+      const enrolled = (user?.biometric_enrolled ?? false) && session !== null;
       if (mounted) {
         setBiometricSupported(supported);
-        setFingerprintEnabled(user?.biometric_enrolled ?? false);
+        setFingerprintEnabled(enrolled);
       }
     };
 
@@ -256,6 +319,66 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
         ) : null}
+
+        {/* Data Mode */}
+        <View style={settingsStyles.section}>
+          <Text style={settingsStyles.sectionTitle}>Data Mode</Text>
+          <View style={modeStyles.row}>
+            <Pressable
+              style={[modeStyles.card, mode === 'offline' && modeStyles.cardActiveLocal]}
+              onPress={() => setMode('offline')}
+            >
+              <MaterialCommunityIcons
+                name="wifi"
+                size={22}
+                color={mode === 'offline' ? '#72F88A' : '#555'}
+              />
+              <Text style={[modeStyles.cardLabel, mode === 'offline' && { color: '#72F88A' }]}>
+                Offline
+              </Text>
+              <Text style={modeStyles.cardSub}>Direct ESP32</Text>
+            </Pressable>
+            <Pressable
+              style={[modeStyles.card, mode === 'online' && modeStyles.cardActiveCloud,
+                !cloudConfig?.serverUrl && modeStyles.cardDisabled]}
+              onPress={() => {
+                if (!cloudConfig?.serverUrl) {
+                  Alert.alert('Cloud not configured',
+                    'Set up your Supabase URL & API key in the Network tab first, then switch to Online mode.');
+                  return;
+                }
+                setMode('online');
+              }}
+            >
+              <MaterialCommunityIcons
+                name="cloud-outline"
+                size={22}
+                color={mode === 'online' ? '#4A9AFF' : cloudConfig?.serverUrl ? '#555' : '#333'}
+              />
+              <Text style={[modeStyles.cardLabel,
+                mode === 'online' ? { color: '#4A9AFF' } : { color: cloudConfig?.serverUrl ? '#888' : '#444' }]}>
+                Online
+              </Text>
+              <Text style={modeStyles.cardSub}>
+                {cloudConfig?.serverUrl ? 'Cloud + MQTT' : 'Configure first'}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={[modeStyles.statusRow, { borderColor: mode === 'online' ? '#4A9AFF33' : '#72F88A33' }]}>
+            <MaterialCommunityIcons
+              name={mode === 'online' ? 'cloud-check' : 'wifi-check'}
+              size={13}
+              color={mode === 'online' ? '#4A9AFF' : '#72F88A'}
+            />
+            <Text style={[modeStyles.statusText, { color: mode === 'online' ? '#4A9AFF' : '#72F88A' }]}>
+              {mode === 'online'
+                ? isOnline
+                  ? 'Cloud active — sensor data from Supabase, commands via MQTT'
+                  : 'Cloud mode — configure cloud URL in Network tab'
+                : 'Local mode — phone talks directly to ESP32 over WiFi'}
+            </Text>
+          </View>
+        </View>
 
         {/* Security Settings */}
         {biometricSupported ? (

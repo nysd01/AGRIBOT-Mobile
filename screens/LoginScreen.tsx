@@ -3,8 +3,8 @@ import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAuth } from '@/context/AuthContext';
@@ -22,27 +23,28 @@ export default function LoginScreen() {
   const { login, biometricLogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showBiometricButton, setShowBiometricButton] = useState(false);
 
-  useEffect(() => {
-    const checkBiometricState = async () => {
-      // Biometric is only available on native platforms
-      if (Platform.OS === 'web') {
-        setShowBiometricButton(false);
-        return;
-      }
-
-      const [sessionUserId, available] = await Promise.all([
-        getBiometricSession(),
-        isBiometricAvailable(),
-      ]);
-
-      setShowBiometricButton(Boolean(sessionUserId) && available);
-    };
-
-    void checkBiometricState();
+  const checkBiometricState = useCallback(async () => {
+    if (Platform.OS === 'web') { setShowBiometricButton(false); return; }
+    const [sessionUserId, available] = await Promise.all([
+      getBiometricSession(),
+      isBiometricAvailable(),
+    ]);
+    setShowBiometricButton(Boolean(sessionUserId) && available);
   }, []);
+
+  // Check on mount AND every time app comes back to foreground
+  // (so enabling biometrics in Settings is reflected immediately on logout)
+  useEffect(() => {
+    void checkBiometricState();
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') void checkBiometricState();
+    });
+    return () => sub.remove();
+  }, [checkBiometricState]);
 
   const handleLogin = useCallback(async () => {
     try {
@@ -135,14 +137,26 @@ export default function LoginScreen() {
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Password</Text>
-              <TextInput
-                placeholder="Enter your password"
-                placeholderTextColor="#6C7473"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                style={styles.input}
-              />
+              <View style={styles.inputRow}>
+                <TextInput
+                  placeholder="Enter your password"
+                  placeholderTextColor="#6C7473"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  style={[styles.input, { flex: 1, borderWidth: 0, borderRadius: 0 }]}
+                />
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => setShowPassword(v => !v)}
+                >
+                  <MaterialCommunityIcons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color="#6C7473"
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <TouchableOpacity
@@ -303,6 +317,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#232829',
     fontSize: 16,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0C0E0F',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#232829',
+    overflow: 'hidden',
+  },
+  eyeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   primaryButton: {
     backgroundColor: '#58C95F',

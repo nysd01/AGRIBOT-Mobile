@@ -1,14 +1,9 @@
-<<<<<<< HEAD
-import { useRouter } from 'expo-router';
-=======
->>>>>>> 216f2d664496eb2cb633b76c9586539cb2f22b5d
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -17,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAuth } from '@/context/AuthContext';
@@ -30,6 +26,8 @@ export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [enrollBiometric, setEnrollBiometric] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -162,29 +160,57 @@ export default function SignupScreen() {
               {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
             </View>
 
+            {/* Password with eye toggle */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Password</Text>
-              <TextInput
-                placeholder="Create a password"
-                placeholderTextColor="#6C7473"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                style={styles.input}
-              />
+              <View style={styles.inputContainer}>
+                <TextInput
+                  placeholder="Create a password"
+                  placeholderTextColor="#6C7473"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  style={styles.inputWithIcon}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialCommunityIcons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color="#6C7473"
+                  />
+                </TouchableOpacity>
+              </View>
               {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
             </View>
 
+            {/* Confirm Password with eye toggle */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Confirm Password</Text>
-              <TextInput
-                placeholder="Confirm your password"
-                placeholderTextColor="#6C7473"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-                style={styles.input}
-              />
+              <View style={styles.inputContainer}>
+                <TextInput
+                  placeholder="Confirm your password"
+                  placeholderTextColor="#6C7473"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  style={styles.inputWithIcon}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowConfirmPassword((prev) => !prev)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialCommunityIcons
+                    name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color="#6C7473"
+                  />
+                </TouchableOpacity>
+              </View>
               {errors.confirmPassword ? (
                 <Text style={styles.errorText}>{errors.confirmPassword}</Text>
               ) : null}
@@ -228,11 +254,7 @@ export default function SignupScreen() {
           {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account?</Text>
-<<<<<<< HEAD
-            <TouchableOpacity onPress={() => router.back()}>
-=======
             <TouchableOpacity onPress={() => router.replace('/login')}>
->>>>>>> 216f2d664496eb2cb633b76c9586539cb2f22b5d
               <Text style={styles.footerLink}>Sign in here</Text>
             </TouchableOpacity>
           </View>
@@ -362,6 +384,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
+  /* Plain text input (username, email) */
   input: {
     backgroundColor: '#0C0E0F',
     color: '#F4F7F8',
@@ -371,6 +394,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#232829',
     fontSize: 16,
+  },
+  /* Password fields: outer row */
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0C0E0F',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#232829',
+  },
+  /* Password TextInput fills the row */
+  inputWithIcon: {
+    flex: 1,
+    color: '#F4F7F8',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+  },
+  /* Eye icon button */
+  eyeButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   errorText: {
     color: '#F28C8C',
