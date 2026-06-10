@@ -41,11 +41,3 @@ app-example
 # generated native folders
 /ios
 /android
-
-# Python (AGRIBOT-Remote backend)
-.venv/
-__pycache__/
-*.pyc
-
-# PlatformIO build artifacts (AGRIBOT-Remote firmware)
-.pio/

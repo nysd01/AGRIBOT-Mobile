@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\BC\\\\Desktop\\\\AGRIBOT-Remote\" -File | Where-Object {$_.Extension -in @\\('.env', '.txt', '.ini', '.cfg', '.conf'\\)} | Format-Table Name, FullName)",
+      "PowerShell(Start-Process \"code\" -ArgumentList \"--new-window `\"C:\\\\Users\\\\BC\\\\Desktop\\\\AGRIBOT-Mobile`\"\")"
+    ]
+  }
+}
