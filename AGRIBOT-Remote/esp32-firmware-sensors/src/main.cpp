@@ -59,6 +59,8 @@ DHT dht(DHTPIN, DHTTYPE);
 #define FLAME_PIN 35   // HW-484 Flame
 #define SOIL_PIN  33   // HW-080 Soil Moisture
 
+#define FLAME_THRESHOLD 1000   // lower = darker/closer flame needed to trigger
+
 // ── HTTP Server ───────────────────────────────────────────────────────────────
 WebServer server(80);
 
@@ -70,6 +72,8 @@ float  g_temp     = NAN;
 float  g_humidity = NAN;
 int    g_mq       = 0;
 int    g_flame    = 4095;
+bool   g_flameDetected = false;
+int    g_flameLowCount = 0;   // consecutive low-flame-reading readings, for debounce
 int    g_soil     = 4095;
 bool   g_gpsValid = false;
 double g_lat      = 0.0;
@@ -342,8 +346,8 @@ void handleSensors() {
   // Flame
   JsonObject flame = doc["flame"].to<JsonObject>();
   flame["raw"]      = g_flame;
-  flame["detected"] = (g_flame < 1500);
-  flame["status"]   = (g_flame < 1500) ? "DETECTED" : "None";
+  flame["detected"] = g_flameDetected;
+  flame["status"]   = g_flameDetected ? "DETECTED" : "None";
 
   // System
   JsonObject sys = doc["systemInfo"].to<JsonObject>();
@@ -504,7 +508,7 @@ void postToCloud() {
   doc["smoke_raw"]      = g_mq;
   doc["smoke_detected"] = (g_mq > 2500);
   doc["flame_raw"]      = g_flame;
-  doc["flame_detected"] = (g_flame < 1500);
+  doc["flame_detected"] = g_flameDetected;
   doc["gps_valid"]      = g_gpsValid;
   doc["satellites"]     = g_sats;
   if (g_gpsValid) {
@@ -702,6 +706,11 @@ void setup() {
   // Start AP
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(AP_SSID, AP_PASS);
+  // Disable WiFi modem sleep — default power-save delays the radio's
+  // response to incoming packets by 100-300ms, which makes every /cmd
+  // request from the phone feel laggy. Joystick commands need to land
+  // as fast as the radio can manage.
+  WiFi.setSleep(false);
   delay(200);
   Serial.printf("[WiFi] AP  SSID: %s  IP: %s\n",
     AP_SSID, WiFi.softAPIP().toString().c_str());
@@ -796,8 +805,21 @@ void loop() {
     g_temp     = dht.readTemperature();
     g_humidity = dht.readHumidity();
     g_mq       = analogRead(MQ_PIN);
-    g_flame    = analogRead(FLAME_PIN);
     g_soil     = analogRead(SOIL_PIN);
+
+    // Flame sensor (HW-484): the ESP32 ADC on this pin is noisy enough that a
+    // single sample can momentarily dip below the threshold with no flame
+    // present, causing false "FLAME DETECTED" alerts. Average several samples
+    // and require the average to stay low for a few consecutive reads (~6s)
+    // before reporting it as detected.
+    {
+      long sum = 0;
+      for (int i = 0; i < 8; i++) { sum += analogRead(FLAME_PIN); delayMicroseconds(200); }
+      g_flame = sum / 8;
+    }
+    if (g_flame < FLAME_THRESHOLD) g_flameLowCount++;
+    else                           g_flameLowCount = 0;
+    g_flameDetected = g_flameLowCount >= 3;
 
     if (gps.satellites.isValid()) g_sats = gps.satellites.value();
     if (gps.location.isValid()) {
@@ -817,7 +839,7 @@ void loop() {
     Serial.printf("  Soil: %.0f%%  MQ: %d %s  Flame: %d %s\n",
       soilPct(g_soil),
       g_mq,   g_mq > 2500    ? "SMOKE!" : "ok",
-      g_flame, g_flame < 1500 ? "FLAME!" : "ok");
+      g_flame, g_flameDetected ? "FLAME!" : "ok");
     if (g_gpsValid)
       Serial.printf("  GPS: %.6f, %.6f  Sats:%d  Speed:%.1fkm/h\n",
         g_lat, g_lng, g_sats, g_speed);

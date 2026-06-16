@@ -1,26 +1,31 @@
 /**
- * Map screen — Google Maps with:
+ * Map screen — Leaflet map inside a WebView (no Google Maps API key needed):
  *  • Robot GPS trail  (live from ESP32 → shown even when fix is briefly lost)
  *  • Phone GPS        (blue dot via expo-location)
- *  • Both markers use emoji images inside styled bubbles
- *  • Cloud-ready: data is logged locally; future push to backend possible
+ *  • Both markers are emoji bubbles drawn with Leaflet divIcons
+ *
+ * Why a WebView instead of react-native-maps?
+ *  react-native-maps on Android only renders Google's base tiles, which require
+ *  a paid Google Maps API key. UrlTile overlays (OSM/Carto) don't paint under
+ *  this project's new architecture. A WebView running Leaflet sidesteps both:
+ *  it renders free Carto/OSM raster tiles directly, needs no API key, and works
+ *  anywhere there's internet (which Online mode requires anyway).
  *
  * Install expo-location if not yet done:
  *   npx expo install expo-location
  */
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 
 import { useESP32Sensors } from '@/hooks/use-esp32-sensors';
 import { useESP32IP, AP_IP } from '@/context/ESP32Context';
@@ -35,48 +40,124 @@ try {
 type Coord = { latitude: number; longitude: number };
 
 const DEFAULT_REGION = {
-  latitude:      5.3599517,
-  longitude:    -4.0082563,
-  latitudeDelta:  0.01,
-  longitudeDelta: 0.01,
+  latitude:   5.3599517,
+  longitude: -4.0082563,
 };
 
-// ─── Robot marker bubble ─────────────────────────────────────────────────────
+// ─── Leaflet map document ─────────────────────────────────────────────────────
+// Self-contained HTML loaded into the WebView. Leaflet is pulled from a CDN
+// (the map needs internet for tiles regardless). RN drives it by injecting calls
+// to the window.* functions defined here; it posts 'ready' once the map exists.
+const LEAFLET_HTML = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body, #map { margin:0; padding:0; height:100%; width:100%; background:#0b1110; }
+  .bubble {
+    display:flex; align-items:center; justify-content:center;
+    border-radius:50%; border:2.5px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,0.4);
+  }
+  .robot { width:42px; height:42px; background:#72F88A; font-size:22px; }
+  .robot.stale { background:#F4A460; border-color:#ffd580; }
+  .phone { width:36px; height:36px; background:#4A9AFF; font-size:18px; }
+  .mlabel {
+    text-align:center; color:#fff; font-size:10px; font-weight:800; margin-top:2px;
+    text-shadow:0 1px 3px rgba(0,0,0,0.9); font-family:sans-serif; white-space:nowrap;
+  }
+  .leaflet-control-attribution { font-size:9px; background:rgba(7,10,10,0.6); color:#9bb; }
+  .leaflet-control-attribution a { color:#7dc; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+  var map = L.map('map', { zoomControl:false, attributionControl:true })
+             .setView([${DEFAULT_REGION.latitude}, ${DEFAULT_REGION.longitude}], 16);
 
-function RobotMarker({ stale }: { stale: boolean }) {
-  return (
-    <View style={mk.robotWrap}>
-      <View style={[mk.robotBubble, stale && mk.robotBubbleStale]}>
-        <Text style={mk.robotEmoji}>🤖</Text>
-      </View>
-      <View style={[mk.bubbleTail, stale && mk.bubbleTailStale]} />
-      <Text style={[mk.markerLabel, stale && { color: '#F8C472' }]}>
-        {stale ? 'AGRIBOT (last)' : 'AGRIBOT'}
-      </Text>
-    </View>
-  );
-}
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
+    maxZoom: 20,
+    subdomains: 'abcd',
+    attribution: '&copy; OpenStreetMap &copy; CARTO'
+  }).addTo(map);
 
-// ─── Phone marker bubble ─────────────────────────────────────────────────────
+  var robotMarker = null, phoneMarker = null, trailLine = null;
+  var follow = true, firstFix = true;
 
-function PhoneMarker() {
-  return (
-    <View style={mk.phoneWrap}>
-      <View style={mk.phoneBubble}>
-        <Text style={mk.phoneEmoji}>📱</Text>
-      </View>
-      <View style={mk.phoneTail} />
-      <Text style={mk.markerLabel}>You</Text>
-    </View>
-  );
-}
+  function robotIcon(stale){
+    var label = stale ? 'AGRIBOT (last)' : 'AGRIBOT';
+    var cls = stale ? 'bubble robot stale' : 'bubble robot';
+    return L.divIcon({
+      className:'',
+      html:'<div style="display:flex;flex-direction:column;align-items:center;">'
+        + '<div class="'+cls+'">\u{1F916}</div>'
+        + '<div class="mlabel">'+label+'</div></div>',
+      iconSize:[46,60], iconAnchor:[23,46]
+    });
+  }
+  function phoneIcon(){
+    return L.divIcon({
+      className:'',
+      html:'<div style="display:flex;flex-direction:column;align-items:center;">'
+        + '<div class="bubble phone">\u{1F4F1}</div>'
+        + '<div class="mlabel">You</div></div>',
+      iconSize:[40,54], iconAnchor:[20,40]
+    });
+  }
+
+  window.setRobot = function(lat, lng, stale){
+    var ll = [lat, lng];
+    if (!robotMarker) { robotMarker = L.marker(ll, { icon: robotIcon(stale) }).addTo(map); }
+    else { robotMarker.setLatLng(ll); robotMarker.setIcon(robotIcon(stale)); }
+    if (follow) {
+      if (firstFix) { map.setView(ll, 17, { animate:true }); }
+      else { map.panTo(ll, { animate:true }); }
+    }
+    firstFix = false;
+  };
+  window.clearRobot = function(){
+    if (robotMarker) { map.removeLayer(robotMarker); robotMarker = null; }
+  };
+  window.setPhone = function(lat, lng){
+    var ll = [lat, lng];
+    if (!phoneMarker) { phoneMarker = L.marker(ll, { icon: phoneIcon() }).addTo(map); }
+    else { phoneMarker.setLatLng(ll); }
+  };
+  window.removePhone = function(){
+    if (phoneMarker) { map.removeLayer(phoneMarker); phoneMarker = null; }
+  };
+  window.setTrail = function(coordsJson){
+    var coords = JSON.parse(coordsJson);
+    if (trailLine) { map.removeLayer(trailLine); trailLine = null; }
+    if (coords.length > 1) {
+      trailLine = L.polyline(coords, { color:'#72F88A', weight:3, dashArray:'6,3' }).addTo(map);
+    }
+  };
+  window.centerOn = function(lat, lng){ map.setView([lat, lng], 17, { animate:true }); };
+  window.setFollow = function(f){
+    follow = f;
+    if (f && robotMarker) { map.panTo(robotMarker.getLatLng(), { animate:true }); }
+  };
+
+  function notifyReady(){
+    if (window.ReactNativeWebView) { window.ReactNativeWebView.postMessage('ready'); }
+  }
+  notifyReady();
+</script>
+</body>
+</html>`;
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function MapScreen() {
   const { sensorData, isConnected } = useESP32Sensors();
-  const { espIP, resetToAP }        = useESP32IP();
-  const mapRef = useRef<MapView>(null);
+  const { espIP }                   = useESP32IP();
+  const webRef = useRef<WebView>(null);
+
+  const [mapReady, setMapReady] = useState(false);
 
   // Robot GPS trail
   const [trail,        setTrail]        = useState<Coord[]>([]);
@@ -89,6 +170,11 @@ export default function MapScreen() {
   const [userCoord,       setUserCoord]       = useState<Coord | null>(null);
   const [locationGranted, setLocationGranted] = useState(false);
   const [showUserMarker,  setShowUserMarker]  = useState(true);
+
+  // Inject a JS call into the Leaflet WebView (no-op until the map is ready).
+  const inject = useCallback((js: string) => {
+    webRef.current?.injectJavaScript(js + ' true;');
+  }, []);
 
   // ── Parse ESP32 GPS fields ──────────────────────────────────────────────
   const gpsData    = sensorData?.location?.gps;
@@ -112,19 +198,13 @@ export default function MapScreen() {
         if (last?.latitude === coord.latitude && last?.longitude === coord.longitude) return prev;
         return [...prev.slice(-300), coord]; // keep last 300 points
       });
-      if (following) {
-        mapRef.current?.animateToRegion(
-          { ...coord, latitudeDelta: 0.001, longitudeDelta: 0.001 },
-          600,
-        );
-      }
     } else {
       // GPS lost fix — keep last known marker visible but mark it stale
       setCurrentCoord(null);
       if (lastKnown) setGpsStale(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lat, lng, gpsValid, following]);
+  }, [lat, lng, gpsValid]);
 
   // ── Phone GPS ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -151,69 +231,61 @@ export default function MapScreen() {
     return () => { sub?.remove(); };
   }, []);
 
+  // Displayed marker position = live || stale last-known
+  const displayCoord = currentCoord ?? (gpsStale ? lastKnown : null);
+
+  // ── Push state into the Leaflet map (re-runs on mapReady so the initial
+  //    state is flushed once the WebView signals it's ready) ───────────────
+  useEffect(() => {
+    if (!mapReady) return;
+    if (displayCoord) inject(`window.setRobot(${displayCoord.latitude}, ${displayCoord.longitude}, ${gpsStale});`);
+    else inject('window.clearRobot();');
+  }, [mapReady, displayCoord, gpsStale, inject]);
+
+  useEffect(() => {
+    if (!mapReady) return;
+    if (showUserMarker && userCoord) inject(`window.setPhone(${userCoord.latitude}, ${userCoord.longitude});`);
+    else inject('window.removePhone();');
+  }, [mapReady, showUserMarker, userCoord, inject]);
+
+  useEffect(() => {
+    if (!mapReady) return;
+    const coords = trail.map(c => [c.latitude, c.longitude]);
+    inject(`window.setTrail('${JSON.stringify(coords)}');`);
+  }, [mapReady, trail, inject]);
+
+  useEffect(() => {
+    if (!mapReady) return;
+    inject(`window.setFollow(${following});`);
+  }, [mapReady, following, inject]);
+
   // ── Helpers ─────────────────────────────────────────────────────────────
   const clearTrail   = () => { setTrail([]); setLastKnown(null); setGpsStale(false); };
   const centerOnUser = () => {
     if (!userCoord) { Alert.alert('No phone GPS', 'Location not available yet.'); return; }
-    mapRef.current?.animateToRegion({ ...userCoord, latitudeDelta: 0.001, longitudeDelta: 0.001 }, 600);
+    inject(`window.centerOn(${userCoord.latitude}, ${userCoord.longitude});`);
   };
   const centerOnRobot = () => {
     const c = currentCoord ?? lastKnown;
     if (!c) { Alert.alert('No robot GPS', 'Waiting for GPS fix.'); return; }
-    mapRef.current?.animateToRegion({ ...c, latitudeDelta: 0.001, longitudeDelta: 0.001 }, 600);
+    inject(`window.centerOn(${c.latitude}, ${c.longitude});`);
   };
-
-  // Displayed marker position = live || stale last-known
-  const displayCoord = currentCoord ?? (gpsStale ? lastKnown : null);
 
   // ── Router / connection hint ─────────────────────────────────────────────
   const onRouter = espIP !== AP_IP;
 
   return (
     <View style={styles.root}>
-      <MapView
-        ref={mapRef}
+      <WebView
+        ref={webRef}
         style={StyleSheet.absoluteFill}
-        provider={Platform.OS === 'web' ? undefined : PROVIDER_GOOGLE}
-        initialRegion={DEFAULT_REGION}
-        showsCompass
-        showsScale
-        showsMyLocationButton={false}
-      >
-        {/* ── Robot marker (live or last-known-stale) ── */}
-        {displayCoord && (
-          <Marker
-            coordinate={displayCoord}
-            title={gpsStale ? 'AGRIBOT (last known)' : 'AGRIBOT'}
-            description={`${displayCoord.latitude.toFixed(6)}, ${displayCoord.longitude.toFixed(6)}`}
-            anchor={{ x: 0.5, y: 1.0 }}
-          >
-            <RobotMarker stale={gpsStale} />
-          </Marker>
-        )}
-
-        {/* ── GPS trail ── */}
-        {trail.length > 1 && (
-          <Polyline
-            coordinates={trail}
-            strokeColor="#72F88A"
-            strokeWidth={3}
-            lineDashPattern={[6, 3]}
-          />
-        )}
-
-        {/* ── Phone (user) marker ── */}
-        {showUserMarker && userCoord && (
-          <Marker
-            coordinate={userCoord}
-            title="Your phone"
-            description={`${userCoord.latitude.toFixed(6)}, ${userCoord.longitude.toFixed(6)}`}
-            anchor={{ x: 0.5, y: 1.0 }}
-          >
-            <PhoneMarker />
-          </Marker>
-        )}
-      </MapView>
+        originWhitelist={['*']}
+        source={{ html: LEAFLET_HTML }}
+        javaScriptEnabled
+        domStorageEnabled
+        androidLayerType="hardware"
+        onMessage={e => { if (e.nativeEvent.data === 'ready') setMapReady(true); }}
+      />
 
       {/* ── Header ── */}
       <SafeAreaView edges={['top']} style={styles.headerWrap} pointerEvents="box-none">
@@ -349,50 +421,6 @@ export default function MapScreen() {
     </View>
   );
 }
-
-// ─── Marker styles ────────────────────────────────────────────────────────────
-
-const mk = StyleSheet.create({
-  // Robot
-  robotWrap:   { alignItems: 'center' },
-  robotBubble: {
-    width: 46, height: 46, borderRadius: 23,
-    backgroundColor: '#72F88A',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2.5, borderColor: '#fff',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
-  },
-  robotBubbleStale: { backgroundColor: '#F4A460', borderColor: '#ffd580' },
-  robotEmoji: { fontSize: 24 },
-  bubbleTail: {
-    width: 0, height: 0,
-    borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 10,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent',
-    borderTopColor: '#72F88A',
-  },
-  bubbleTailStale: { borderTopColor: '#F4A460' },
-  markerLabel: {
-    color: '#fff', fontSize: 10, fontWeight: '800', marginTop: 2,
-    textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3,
-  },
-
-  // Phone
-  phoneWrap:   { alignItems: 'center' },
-  phoneBubble: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#4A9AFF',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: '#fff',
-    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, elevation: 4,
-  },
-  phoneEmoji: { fontSize: 20 },
-  phoneTail:  {
-    width: 0, height: 0,
-    borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 8,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent',
-    borderTopColor: '#4A9AFF',
-  },
-});
 
 // ─── Screen styles ────────────────────────────────────────────────────────────
 

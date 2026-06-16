@@ -88,7 +88,7 @@ export default function LoginScreen() {
               <MaterialCommunityIcons name="sprout" size={32} color="#7DFB8C" />
             </View>
             <View style={styles.brandTextWrap}>
-              <Text style={styles.brandLabel}>AGRIBOT</Text>
+              <Text style={styles.brandLabel}>AGRIROMOTE</Text>
               <Text style={styles.brandSubLabel}>Smart Farming</Text>
             </View>
           </View>

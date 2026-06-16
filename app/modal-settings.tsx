@@ -454,7 +454,7 @@ export default function SettingsScreen() {
             <View>
               <Text style={settingsStyles.settingLabel}>App Version</Text>
               <Text style={settingsStyles.settingDescription}>
-                Agribot v2.4.1
+                AGRIROMOTE v2.4.1
               </Text>
             </View>
             <MaterialCommunityIcons

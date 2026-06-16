@@ -183,7 +183,7 @@ export default function DashboardScreen() {
         <View style={styles.topRow}>
           <View style={styles.brandRow}>
             <MaterialCommunityIcons name="sprout" size={18} color="#70F57D" />
-            <Text style={styles.brandText}>Agribot</Text>
+            <Text style={styles.brandText}>AGRIROMOTE</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {/* Mode chip — LOCAL or CLOUD */}

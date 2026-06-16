@@ -1,0 +1,372 @@
+Starting project at C:\Users\BC\Desktop\AGRIBOT-Mobile
+React Compiler enabled
+Starting Metro Bundler
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 85.2% (1528/1701)
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@54.0.34 - expected version: ~54.0.35
+  expo-file-system@19.0.22 - expected version: ~19.0.23
+  expo-font@14.0.11 - expected version: ~14.0.12
+  expo-router@6.0.23 - expected version: ~6.0.24
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 94.6% (1728/1777)
+Android Bundled 4525ms node_modules\expo-router\entry.js (1906 modules)
+ WARN  Value being stored in SecureStore is larger than 2048 bytes and it may not be stored successfully. In a future SDK version, this call may throw an error.
+ LOG  [Auth] Session restored from Supabase for nysdderek@gmail.com
+ WARN  SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/th3rdwave/react-native-safe-area-context
+Android node_modules\mqtt\lib\connect\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 426ms node_modules\mqtt\lib\connect\index.js (104 modules)
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ LOG  [AlertMonitor] Alert email sent to nysdderek@gmail.com
+ LOG  [AlertMonitor] Alert email sent to nysdderek@gmail.com
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [AlertMonitor] Email delivery failed (edge function unreachable): [TypeError: Network request failed]
+ WARN  [AlertMonitor] Email delivery failed (edge function unreachable): [TypeError: Network request failed]
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+Android node_modules\react-native-ble-plx\src\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 1530ms node_modules\react-native-ble-plx\src\index.js (592 modules)
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 299ms node_modules\expo-router\entry.js (1 module)
+ LOG  [Auth] Session restored from Supabase for nysdderek@gmail.com
+Android node_modules\react-native-ble-plx\src\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 55ms node_modules\react-native-ble-plx\src\index.js (1 module)
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [AlertMonitor] Email delivery failed (edge function unreachable): [TypeError: Network request failed]
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ WARN  [AlertMonitor] Email delivery failed (edge function unreachable): [TypeError: Network request failed]
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+Android node_modules\mqtt\lib\connect\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 40ms node_modules\mqtt\lib\connect\index.js (1 module)
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 3004ms node_modules\expo-router\entry.js (1 module)
+ LOG  [Auth] Session restored from Supabase for nysdderek@gmail.com
+Android node_modules\mqtt\lib\connect\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 8ms node_modules\mqtt\lib\connect\index.js (1 module)
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ LOG  [AlertMonitor] Alert email sent to nysdderek@gmail.com
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ LOG  [AlertMonitor] Alert email sent to nysdderek@gmail.com
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/th3rdwave/react-native-safe-area-context
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [expo-notifications]: `shouldShowAlert` is deprecated. Specify `shouldShowBanner` and / or `shouldShowList` instead.
+ LOG  [AlertMonitor] Alert email sent to nysdderek@gmail.com
+ LOG  [AlertMonitor] Alert email sent to nysdderek@gmail.com
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  "smoke-detector-variant-outline" is not a valid icon name for family "material-community"
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Network request failed
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  Value being stored in SecureStore is larger than 2048 bytes and it may not be stored successfully. In a future SDK version, this call may throw an error.
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 401ms node_modules\expo-router\entry.js (1 module)
+ LOG  [Auth] Session restored from Supabase for nysdderek@gmail.com
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+Android node_modules\mqtt\lib\connect\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 18ms node_modules\mqtt\lib\connect\index.js (1 module)
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+ WARN  [Cloud] Aborted
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 11791ms node_modules\expo-router\entry.js (1 module)
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+ WARN  Value being stored in SecureStore is larger than 2048 bytes and it may not be stored successfully. In a future SDK version, this call may throw an error.
+ LOG  [Auth] Session restored from Supabase for nysdderek@gmail.com
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+ WARN  [ESP32] sensor fetch failed: Network request failed
+Android node_modules\mqtt\lib\connect\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 753ms node_modules\mqtt\lib\connect\index.js (1 module)
+ WARN  SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/th3rdwave/react-native-safe-area-context
+Android node_modules\react-native-ble-plx\src\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 2129ms node_modules\react-native-ble-plx\src\index.js (1 module)

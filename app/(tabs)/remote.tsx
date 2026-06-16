@@ -12,6 +12,7 @@ import {
   GestureResponderEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Accelerometer } from 'expo-sensors';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -20,6 +21,7 @@ import { useESP32Sensors } from '@/hooks/use-esp32-sensors';
 import { useESP32IP } from '@/context/ESP32Context';
 import { useAppMode } from '@/context/AppModeContext';
 import { useMqtt } from '@/hooks/use-mqtt';
+import { useBleRemote } from '@/hooks/use-ble-remote';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -124,16 +126,152 @@ function PathChart({ trail, waypoints, onTap, drawMode }: {
   );
 }
 
+// ─── Camera feed ──────────────────────────────────────────────────────────────
+// Memoized so the joystick loop (stickPos/direction/lastCmd updating at ~20 Hz)
+// never re-renders the native camera surface — that re-render churn was the
+// source of the camera lag. The feed itself stays fixed (no tilt transform).
+
+const LandscapeCameraFeed = React.memo(function LandscapeCameraFeed({ active }: { active: boolean }) {
+  return active ? (
+    <CameraView style={StyleSheet.absoluteFill} facing="back" />
+  ) : (
+    <View style={[StyleSheet.absoluteFill, lsStyles.offBg]}>
+      <MaterialCommunityIcons name="robot-industrial" size={180} color="#58C95F" style={{ opacity: 0.12 }} />
+    </View>
+  );
+});
+
+const PortraitCameraFeed = React.memo(function PortraitCameraFeed({ active }: { active: boolean }) {
+  return active ? (
+    <CameraView style={StyleSheet.absoluteFill} facing="back" />
+  ) : (
+    <>
+      <MaterialCommunityIcons name="robot-industrial" size={120} color="#58C95F" style={{ opacity: 0.5 }} />
+      <Text style={remoteStyles.liveVideoLabel}>Rotate to landscape for full-screen camera</Text>
+    </>
+  );
+});
+
+// ─── Camera pan control ───────────────────────────────────────────────────────
+// The camera feed itself is the control: drag anywhere on it to pan, pivoting
+// around the center of the feed. While the drag stays in a direction, the
+// CU/CD/CX/CY command repeats every CAM_THROTTLE_MS; on release CS is sent once.
+// Independent of the wheel joystick/gyro — gyro never feeds these commands.
+
+const CAM_THROTTLE_MS = 50;
+const CAM_MAX_D = 70;
+
+function CameraPanControl({ sendCamDir, ringSize }: { sendCamDir: (cmd: string) => void; ringSize: number }) {
+  const [layout, setLayout] = useState({ w: 0, h: 0 });
+  const [stick,  setStick]  = useState({ x: 0, y: 0 });
+  const [dir,    setDir]    = useState<string | null>(null);
+  const layoutRef    = useRef({ w: 0, h: 0 });
+  const dirRef       = useRef<string | null>(null);
+  const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const setActiveDir = useCallback((newDir: string | null) => {
+    if (dirRef.current === newDir) return;
+    dirRef.current = newDir;
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    if (newDir) {
+      const cmd = newDir === 'up' ? 'CU' : newDir === 'down' ? 'CD' : newDir === 'left' ? 'CX' : 'CY';
+      sendCamDir(cmd);
+      intervalRef.current = setInterval(() => sendCamDir(cmd), CAM_THROTTLE_MS);
+    } else {
+      sendCamDir('CS');
+    }
+    setDir(newDir);
+  }, [sendCamDir]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderMove: (_, { dx, dy }) => {
+        const dist  = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx);
+        const fx = dist > CAM_MAX_D ? Math.cos(angle) * CAM_MAX_D : dx;
+        const fy = dist > CAM_MAX_D ? Math.sin(angle) * CAM_MAX_D : dy;
+        setStick({ x: fx, y: fy });
+        const deg = (angle * 180) / Math.PI;
+        if      (dist < 20)                 setActiveDir(null);
+        else if (deg > -45  && deg <= 45)   setActiveDir('right');
+        else if (deg > 45   && deg <= 135)  setActiveDir('down');
+        else if (deg > 135  || deg <= -135) setActiveDir('left');
+        else                                 setActiveDir('up');
+      },
+      onPanResponderRelease: () => {
+        setStick({ x: 0, y: 0 });
+        setActiveDir(null);
+      },
+    })
+  ).current;
+
+  useEffect(() => () => { if (intervalRef.current) clearInterval(intervalRef.current); }, []);
+
+  return (
+    <View
+      style={StyleSheet.absoluteFill}
+      onLayout={e => {
+        const { width, height } = e.nativeEvent.layout;
+        layoutRef.current = { w: width, h: height };
+        setLayout({ w: width, h: height });
+      }}
+      {...panResponder.panHandlers}
+    >
+      {/* Pivot reticle — invisible but still occupies the touch area above */}
+      <View
+        pointerEvents="none"
+        style={[
+          camPanStyles.ring,
+          { width: ringSize, height: ringSize, borderRadius: ringSize / 2, left: layout.w / 2 - ringSize / 2, top: layout.h / 2 - ringSize / 2, opacity: 0 },
+        ]}
+      >
+        <Text style={[camPanStyles.arrow, camPanStyles.arrowUp,    dir === 'up'    && camPanStyles.arrowActive]}>▲</Text>
+        <Text style={[camPanStyles.arrow, camPanStyles.arrowDown,  dir === 'down'  && camPanStyles.arrowActive]}>▼</Text>
+        <Text style={[camPanStyles.arrow, camPanStyles.arrowLeft,  dir === 'left'  && camPanStyles.arrowActive]}>◄</Text>
+        <Text style={[camPanStyles.arrow, camPanStyles.arrowRight, dir === 'right' && camPanStyles.arrowActive]}>►</Text>
+        <View style={[camPanStyles.dot, { transform: [{ translateX: stick.x }, { translateY: stick.y }] }]} />
+      </View>
+    </View>
+  );
+}
+
+// Mirrors the tabBarStyle set in app/(tabs)/_layout.tsx screenOptions —
+// used to restore it when leaving landscape (setOptions overrides screenOptions).
+const TAB_BAR_STYLE = {
+  backgroundColor: '#1B1F1C',
+  borderTopWidth:  0,
+  marginHorizontal: 12,
+  marginBottom:    10,
+  borderRadius:    22,
+  height:          74,
+  position:        'absolute' as const,
+  paddingTop:      8,
+  paddingBottom:   10,
+};
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function RemoteScreen() {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
+  const navigation = useNavigation();
+
+  // Hide the bottom tab bar in landscape so the camera/joystick HUD has the
+  // full screen — restore it when back in portrait or leaving the screen.
+  // (tabBarStyle must be set via this screen's own navigation object — it
+  // propagates up to the parent Tabs navigator's tab bar.)
+  useEffect(() => {
+    navigation.setOptions({ tabBarStyle: isLandscape ? { display: 'none' } : TAB_BAR_STYLE });
+    return () => navigation.setOptions({ tabBarStyle: TAB_BAR_STYLE });
+  }, [isLandscape, navigation]);
 
   const { espIP } = useESP32IP();
   const { isOnline, isOnlineMode, cloudConfig } = useAppMode();
   const { mqttConnected, publishCmd } = useMqtt();
   const { sensorData, isConnected } = useESP32Sensors({ pollInterval: 1000 });
+  const { bleStatus, bleConnected, bleDeviceName, scanAndConnect, disconnectBle, sendBleCmd } = useBleRemote();
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [isAutonomous,   setIsAutonomous]   = useState(true);
@@ -142,13 +280,23 @@ export default function RemoteScreen() {
   const [gyroEnabled,    setGyroEnabled]    = useState(false);
   const [cameraActive,   setCameraActive]   = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [tiltX,          setTiltX]          = useState(0);
-  const [tiltY,          setTiltY]          = useState(0);
   const [drawMode,       setDrawMode]       = useState(false);
   const [userWaypoints,  setUserWaypoints]  = useState<NormPoint[]>([]);
   const [gpsTrail,       setGpsTrail]       = useState<Coord[]>([]);
   const [lastCmd,        setLastCmd]        = useState<string>('');   // visual feedback
+  // Offline-mode command channel: WiFi (HTTP to ESP32) or direct Bluetooth (BLE to ESP32-Motors)
+  const [controlChannel, setControlChannel] = useState<'wifi' | 'bluetooth'>('wifi');
   const joystickRef = useRef(null);
+
+  const handleSelectBluetooth = useCallback(() => {
+    setControlChannel('bluetooth');
+    if (!bleConnected) void scanAndConnect();
+  }, [bleConnected, scanAndConnect]);
+
+  const handleSelectWifi = useCallback(() => {
+    setControlChannel('wifi');
+    if (bleConnected) void disconnectBle();
+  }, [bleConnected, disconnectBle]);
 
   // ── Live sensor values ─────────────────────────────────────────────────────
   const tempC    = sensorData?.domino4?.weather?.temperatureC ?? sensorData?.temperatureC;
@@ -200,16 +348,17 @@ export default function RemoteScreen() {
   const MOTOR_THROTTLE_MS = 50; // ~20 cmds/sec
   const throttleRef = useRef({ time: 0, cmd: '' });
 
-  // Same cadence for camera pan — see cameraPanResponder below.
-  const CAM_THROTTLE_MS = 50;
-
-  // Refs for the static camera pan-responder closure (can't capture changing state directly)
-  const isOnlineRef    = useRef(isOnlineMode);
-  const espIPRef       = useRef(espIP);
-  const publishCmdRef  = useRef<(cmd: string) => boolean>(() => false);
-  useEffect(() => { isOnlineRef.current   = isOnlineMode; }, [isOnlineMode]);
-  useEffect(() => { espIPRef.current      = espIP; },       [espIP]);
-  useEffect(() => { publishCmdRef.current = publishCmd; },  [publishCmd]);
+  // Refs for the camera-pan command sender (can't capture changing state directly)
+  const isOnlineRef       = useRef(isOnlineMode);
+  const espIPRef          = useRef(espIP);
+  const publishCmdRef     = useRef<(cmd: string) => boolean>(() => false);
+  const controlChannelRef = useRef(controlChannel);
+  const sendBleCmdRef     = useRef<(cmd: string) => boolean>(() => false);
+  useEffect(() => { isOnlineRef.current       = isOnlineMode; },    [isOnlineMode]);
+  useEffect(() => { espIPRef.current          = espIP; },           [espIP]);
+  useEffect(() => { publishCmdRef.current     = publishCmd; },      [publishCmd]);
+  useEffect(() => { controlChannelRef.current = controlChannel; },  [controlChannel]);
+  useEffect(() => { sendBleCmdRef.current     = sendBleCmd; },       [sendBleCmd]);
 
   /** Insert one command row into Supabase (online mode fallback). */
   const postCloudCmd = useCallback(async (cmd: string) => {
@@ -259,10 +408,13 @@ export default function RemoteScreen() {
       // Primary: MQTT (~40 ms). Fallback: Supabase (~500 ms) if MQTT not connected.
       const ok = publishCmd(cmd);
       if (!ok) void postCloudCmd(cmd);
+    } else if (controlChannel === 'bluetooth') {
+      // Direct BLE to ESP32-Motors — no WiFi link needed at all.
+      sendBleCmd(cmd);
     } else {
       void postDirectCmd(cmd);
     }
-  }, [isOnlineMode, publishCmd, postCloudCmd, postDirectCmd]);
+  }, [isOnlineMode, controlChannel, publishCmd, postCloudCmd, postDirectCmd, sendBleCmd]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  JOYSTICK → MOTOR COMMANDS
@@ -270,12 +422,14 @@ export default function RemoteScreen() {
   //  Uses tank/differential drive: M<left>,<right>
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const prevDirRef = useRef<string | null>(null);
+  const prevDirRef     = useRef<string | null>(null);
+  const lastMotorCmdRef = useRef<string>('S');
 
   useEffect(() => {
     if (isAutonomous) return;
 
     if (!direction) {
+      lastMotorCmdRef.current = 'S';
       // Only fire stop once per release (not every render while stopped)
       if (prevDirRef.current !== null) {
         void sendMotorCmd('S');
@@ -296,8 +450,22 @@ export default function RemoteScreen() {
     const left  = Math.round(clamp(rawL, -255, 255));
     const right = Math.round(clamp(rawR, -255, 255));
 
-    void sendMotorCmd(`M${left},${right}`);
+    const cmd = `M${left},${right}`;
+    lastMotorCmdRef.current = cmd;
+    void sendMotorCmd(cmd);
   }, [direction, stickPos, isAutonomous, sendMotorCmd]);
+
+  // Holding a steady tilt (gyro) or a steady stick position produces no new
+  // direction/stickPos state, so the effect above only fires once. But the
+  // ESP32 watchdog (WATCHDOG_MS = 2000ms) stops the motors if it doesn't see
+  // a command for 2s — resend the last motor command periodically while a
+  // direction is held so the robot keeps moving without needing to "shake".
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (prevDirRef.current) void sendMotorCmd(lastMotorCmdRef.current);
+    }, 500);
+    return () => clearInterval(id);
+  }, [sendMotorCmd]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  JOYSTICK PAN RESPONDER  (controls stick visuals + sets direction/stickPos)
@@ -330,23 +498,18 @@ export default function RemoteScreen() {
   ).current;
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  CAMERA SWIPE PAN RESPONDER
-  //  Overlaid on the camera view — swipe gestures pan/tilt the robot camera.
-  //  Re-sends CU / CD / CX / CY continuously while held (same ~20/sec cadence
-  //  as the wheel's sendMotorCmd) instead of once on direction-change — a
-  //  single dropped packet (UDP/HTTP) used to leave camDir stuck and the
-  //  camera not moving at all. CS fires once when the swipe returns to the
-  //  dead zone or on release, mirroring the wheel's "S on direction null".
+  //  CAMERA PAN COMMAND SENDER
+  //  Used by CameraPanControl: while dragging in a direction, CU/CD/CX/CY
+  //  repeats every CAM_THROTTLE_MS; release → CS once. Entirely separate
+  //  from the wheel/gyro path below — gyro tilt never reaches this function.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const camDirRef      = useRef<string>('');
-  const camThrottleRef = useRef(0);
-
-  // Use refs so this static closure always reads current values
-  const sendCamDir = (cmd: string) => {
+  const sendCamDir = useCallback((cmd: string) => {
     setLastCmd(cmd);
     if (isOnlineRef.current) {
       publishCmdRef.current(cmd);
+    } else if (controlChannelRef.current === 'bluetooth') {
+      sendBleCmdRef.current(cmd);
     } else {
       const ip = espIPRef.current;
       if (ip) {
@@ -357,63 +520,30 @@ export default function RemoteScreen() {
           .finally(() => clearTimeout(timer));
       }
     }
-  };
-
-  const cameraPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
-      onPanResponderGrant: () => { camDirRef.current = ''; camThrottleRef.current = 0; },
-      onPanResponderMove: (_, { dx, dy }) => {
-        const THRESHOLD = 15;
-        let newDir = '';
-        if      (Math.abs(dy) > Math.abs(dx) && dy < -THRESHOLD) newDir = 'CU';
-        else if (Math.abs(dy) > Math.abs(dx) && dy >  THRESHOLD) newDir = 'CD';
-        else if (Math.abs(dx) > Math.abs(dy) && dx < -THRESHOLD) newDir = 'CX';
-        else if (Math.abs(dx) > Math.abs(dy) && dx >  THRESHOLD) newDir = 'CY';
-
-        if (!newDir) {
-          // Swipe back inside the dead zone — stop, like releasing the wheel stick.
-          if (camDirRef.current) {
-            camDirRef.current = '';
-            sendCamDir('CS');
-          }
-          return;
-        }
-
-        camDirRef.current = newDir;
-
-        // Time-based throttle (not "skip if same dir") so the held direction
-        // keeps re-sending every ~50 ms — same pattern as sendMotorCmd.
-        const now = Date.now();
-        if (now - camThrottleRef.current < CAM_THROTTLE_MS) return;
-        camThrottleRef.current = now;
-        sendCamDir(newDir);
-      },
-      onPanResponderRelease: () => {
-        if (camDirRef.current) sendCamDir('CS');
-        camDirRef.current = '';
-      },
-    })
-  ).current;
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  GYROSCOPE → MOTOR COMMANDS  (tilt phone to steer)
+  //  GYROSCOPE → MOTOR COMMANDS  (tilt phone to steer — wheels only, never camera)
   // ═══════════════════════════════════════════════════════════════════════════
 
   useEffect(() => {
     if (!gyroEnabled || isAutonomous) return;
     Accelerometer.setUpdateInterval(100);
     const sub = Accelerometer.addListener(({ x, y }) => {
-      const magnitude = Math.sqrt(x * x + y * y);
+      // Raw accelerometer axes are relative to the device's physical frame,
+      // not the screen. Remap them to "tilt left/right" / "tilt forward/back"
+      // based on how the phone is currently being held.
+      const tiltX = isLandscape ? -y : x;   // left/right tilt → turn
+      const tiltY = isLandscape ? -x : -y;  // forward/back tilt → drive
+      const magnitude = Math.sqrt(tiltX * tiltX + tiltY * tiltY);
       if (magnitude < 0.2) {
         setDirection(null);
         setStickPos({ x: 0, y: 0 });
         return;
       }
       const scaleFactor = 60 / 10;
-      const sx = ( x / 10) * scaleFactor;
-      const sy = (-y / 10) * scaleFactor;
+      const sx = (tiltX / 10) * scaleFactor;
+      const sy = (tiltY / 10) * scaleFactor;
       const dist  = Math.sqrt(sx * sx + sy * sy);
       const maxD  = 60;
       const angle = Math.atan2(sy, sx);
@@ -428,18 +558,7 @@ export default function RemoteScreen() {
       else                                setDirection('up');
     });
     return () => sub.remove();
-  }, [gyroEnabled, isAutonomous]);
-
-  // Landscape tilt overlay
-  useEffect(() => {
-    if (isAutonomous || !isLandscape) return;
-    Accelerometer.setUpdateInterval(50);
-    const sub = Accelerometer.addListener(({ x, y }) => {
-      setTiltX(Math.max(-1, Math.min(1, x)));
-      setTiltY(Math.max(-1, Math.min(1, y)));
-    });
-    return () => sub.remove();
-  }, [isAutonomous, isLandscape]);
+  }, [gyroEnabled, isAutonomous, isLandscape]);
 
   // ── Display labels ──────────────────────────────────────────────────────────
   const dirLabel = direction === 'up' ? 'FORWARD' : direction === 'down' ? 'BACKWARD' :
@@ -457,34 +576,11 @@ export default function RemoteScreen() {
   if (!isAutonomous && isLandscape) {
     return (
       <View style={StyleSheet.absoluteFill}>
-        {/* Camera or dark background */}
-        {cameraActive ? (
-          <CameraView
-            style={[StyleSheet.absoluteFill, {
-              transform: [
-                { perspective: 800 },
-                { rotateX: `${tiltY * 20}deg` },
-                { rotateY: `${-tiltX * 20}deg` },
-              ],
-            }]}
-            facing="back"
-          />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, lsStyles.offBg]}>
-            <MaterialCommunityIcons name="robot-industrial" size={180} color="#58C95F" style={{ opacity: 0.12 }} />
-          </View>
-        )}
+        {/* Camera or dark background — memoized, fixed (no tilt transform) */}
+        <LandscapeCameraFeed active={cameraActive} />
 
-        {/* ── Camera swipe overlay (right half) — pan/tilt robot camera ── */}
-        <View
-          style={lsStyles.camSwipeOverlay}
-          {...cameraPanResponder.panHandlers}
-        >
-          <View style={lsStyles.camSwipeHint}>
-            <MaterialCommunityIcons name="gesture-swipe" size={14} color="rgba(255,255,255,0.4)" />
-            <Text style={lsStyles.camSwipeHintText}>Swipe to pan camera</Text>
-          </View>
-        </View>
+        {/* ── Drag anywhere on the camera to pan, pivoting from its center ── */}
+        {cameraActive && <CameraPanControl sendCamDir={sendCamDir} ringSize={150} />}
 
         {/* Top-left */}
         <View style={lsStyles.topLeft}>
@@ -495,6 +591,33 @@ export default function RemoteScreen() {
           <Pressable onPress={() => setIsAutonomous(true)} style={lsStyles.autoBtn}>
             <Text style={lsStyles.autoBtnText}>AUTO</Text>
           </Pressable>
+          {/* Gyro toggle — controls the wheels only, never the camera */}
+          <Pressable
+            onPress={() => setGyroEnabled(v => !v)}
+            style={[lsStyles.gyroBtn, gyroEnabled && lsStyles.gyroBtnActive]}
+          >
+            <MaterialCommunityIcons name={gyroEnabled ? 'motion-sensor' : 'motion'} size={13} color={gyroEnabled ? '#070A0A' : '#58C95F'} />
+            <Text style={[lsStyles.gyroBtnText, gyroEnabled && lsStyles.gyroBtnTextActive]}>
+              {gyroEnabled ? 'Gyro ON' : 'Gyro OFF'}
+            </Text>
+          </Pressable>
+          {!isOnlineMode && (
+            <Pressable
+              onPress={() => (controlChannel === 'wifi' ? handleSelectBluetooth() : handleSelectWifi())}
+              style={[lsStyles.channelBtn, controlChannel === 'bluetooth' && lsStyles.channelBtnBle]}
+            >
+              <MaterialCommunityIcons
+                name={controlChannel === 'bluetooth' ? 'bluetooth' : 'wifi'}
+                size={13}
+                color={controlChannel === 'bluetooth' ? (bleConnected ? '#4A9AFF' : '#F59E0B') : '#58C95F'}
+              />
+              <Text style={lsStyles.channelBtnText}>
+                {controlChannel === 'bluetooth'
+                  ? (bleConnected ? 'BLE' : bleStatus === 'scanning' || bleStatus === 'connecting' ? 'BLE…' : 'BLE ✕')
+                  : 'WiFi'}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         {/* HUD */}
@@ -540,10 +663,16 @@ export default function RemoteScreen() {
           </View>
         )}
 
-        {/* Joystick (left side) */}
+        {/* Joystick (left side) — always visible. While gyro is on, touch is
+            disabled (so it can't fight the tilt input) but the ring and stick
+            stay on screen, driven by gyro tilt, with a GYRO badge overlay. */}
         <View style={lsStyles.joystickWrap}>
           <Text style={lsStyles.dirText}>{dirLabel}</Text>
-          <View ref={joystickRef} style={lsStyles.joystickRing} {...panResponder.panHandlers}>
+          <View
+            ref={joystickRef}
+            style={lsStyles.joystickRing}
+            {...(gyroEnabled ? {} : panResponder.panHandlers)}
+          >
             <Text style={[lsStyles.ringLabel, lsStyles.ringTop,    direction === 'up'    && lsStyles.ringActive]}>▲</Text>
             <Text style={[lsStyles.ringLabel, lsStyles.ringBottom, direction === 'down'  && lsStyles.ringActive]}>▼</Text>
             <Text style={[lsStyles.ringLabel, lsStyles.ringLeft,   direction === 'left'  && lsStyles.ringActive]}>◄</Text>
@@ -553,6 +682,11 @@ export default function RemoteScreen() {
                 <MaterialCommunityIcons name={stickIcon} size={24} color="#070A0A" />
               </View>
             </View>
+            {gyroEnabled && (
+              <View style={lsStyles.gyroBadge}>
+                <Text style={lsStyles.gyroBadgeText}>GYRO</Text>
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -601,6 +735,44 @@ export default function RemoteScreen() {
             <View style={mqttBadgeStyle.wrap}>
               <View style={[mqttBadgeStyle.dot, { backgroundColor: mqttConnected ? '#58C95F' : '#F59E0B' }]} />
               <Text style={mqttBadgeStyle.text}>{mqttConnected ? 'MQTT ACTIVE' : 'MQTT…'}</Text>
+            </View>
+          )}
+          {!isOnlineMode && !isAutonomous && (
+            <View style={channelStyle.wrap}>
+              <Pressable
+                style={[channelStyle.btn, controlChannel === 'wifi' && channelStyle.btnActive]}
+                onPress={handleSelectWifi}
+              >
+                <MaterialCommunityIcons name="wifi" size={13} color={controlChannel === 'wifi' ? '#070A0A' : '#58C95F'} />
+                <Text style={[channelStyle.btnText, controlChannel === 'wifi' && channelStyle.btnTextActive]}>WiFi</Text>
+              </Pressable>
+              <Pressable
+                style={[channelStyle.btn, controlChannel === 'bluetooth' && channelStyle.btnActive]}
+                onPress={handleSelectBluetooth}
+              >
+                <MaterialCommunityIcons name="bluetooth" size={13} color={controlChannel === 'bluetooth' ? '#070A0A' : '#4A9AFF'} />
+                <Text style={[channelStyle.btnText, controlChannel === 'bluetooth' && channelStyle.btnTextActive]}>Bluetooth</Text>
+              </Pressable>
+              {controlChannel === 'bluetooth' && (
+                <View style={channelStyle.statusWrap}>
+                  <View style={[channelStyle.statusDot, { backgroundColor:
+                    bleStatus === 'connected' ? '#58C95F' :
+                    bleStatus === 'error' || bleStatus === 'unsupported' ? '#FF4533' : '#F59E0B'
+                  }]} />
+                  <Text style={channelStyle.statusText}>
+                    {bleStatus === 'connected' ? (bleDeviceName ?? 'Connected') :
+                     bleStatus === 'scanning'    ? 'Scanning…' :
+                     bleStatus === 'connecting'  ? 'Connecting…' :
+                     bleStatus === 'error'       ? 'Not found — tap retry' :
+                     bleStatus === 'unsupported' ? 'Unsupported on this build' : 'Idle'}
+                  </Text>
+                  {(bleStatus === 'error' || bleStatus === 'idle') && (
+                    <Pressable onPress={() => void scanAndConnect()} style={channelStyle.retryBtn}>
+                      <MaterialCommunityIcons name="refresh" size={12} color="#4A9AFF" />
+                    </Pressable>
+                  )}
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -771,30 +943,12 @@ export default function RemoteScreen() {
         ) : (
           /* ── MANUAL CONTROL MODE — PORTRAIT ──────────────────────────── */
           <>
-            {/* ── Live video with camera swipe overlay ── */}
+            {/* ── Live video — drag to pan, pivoting from its center ── */}
             <View style={remoteStyles.liveVideoContainer}>
               <View style={remoteStyles.liveVideoBox}>
-                {cameraActive ? (
-                  <CameraView style={StyleSheet.absoluteFill} facing="back" />
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="robot-industrial" size={120} color="#58C95F" style={{ opacity: 0.5 }} />
-                    <Text style={remoteStyles.liveVideoLabel}>Rotate to landscape for full-screen camera</Text>
-                  </>
-                )}
+                <PortraitCameraFeed active={cameraActive} />
 
-                {/* Camera swipe overlay — transparent, sits on top of camera feed */}
-                <View
-                  style={camOverlay.swipeZone}
-                  {...cameraPanResponder.panHandlers}
-                >
-                  {cameraActive && (
-                    <View style={camOverlay.swipeHint}>
-                      <MaterialCommunityIcons name="gesture-swipe" size={12} color="rgba(255,255,255,0.35)" />
-                      <Text style={camOverlay.swipeHintText}>Swipe to pan camera</Text>
-                    </View>
-                  )}
-                </View>
+                {cameraActive && <CameraPanControl sendCamDir={sendCamDir} ringSize={90} />}
 
                 <Pressable onPress={() => void handleCameraToggle()} style={cameraOverlayStyles.toggleBtn}>
                   <MaterialCommunityIcons name={cameraActive ? 'camera-off' : 'camera'} size={18} color="#fff" />
@@ -848,10 +1002,17 @@ export default function RemoteScreen() {
               </View>
             </View>
 
-            {/* ── JOYSTICK ── */}
+            {/* ── JOYSTICK ──
+                Always rendered, even with gyro on — when gyro is active, touch
+                is disabled (so it can't fight the tilt input) and a GYRO badge
+                overlays the ring, but the ring/stick itself never disappears. */}
             <View style={remoteStyles.joystickSection}>
               <Text style={remoteStyles.joystickDirectionLabel}>{dirLabel}</Text>
-              <View ref={joystickRef} style={remoteStyles.joystickRing} {...panResponder.panHandlers}>
+              <View
+                ref={joystickRef}
+                style={remoteStyles.joystickRing}
+                {...(gyroEnabled ? {} : panResponder.panHandlers)}
+              >
                 {(['up', 'down', 'left', 'right'] as const).map(d => (
                   <Text
                     key={d}
@@ -872,6 +1033,11 @@ export default function RemoteScreen() {
                     <MaterialCommunityIcons name={stickIcon} size={32} color="#070A0A" />
                   </View>
                 </View>
+                {gyroEnabled && (
+                  <View style={joyStyles.gyroBadge}>
+                    <Text style={joyStyles.gyroBadgeText}>GYRO</Text>
+                  </View>
+                )}
               </View>
               <View style={remoteStyles.joystickLabelsRow}>
                 <Text style={remoteStyles.joystickSideLabel}>LEFT</Text>
@@ -918,6 +1084,9 @@ const lsStyles = StyleSheet.create({
   modeText:       { color: '#58C95F', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   autoBtn:        { backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(125,251,140,0.3)' },
   autoBtnText:    { color: '#7DFB8C', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  channelBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(88,201,95,0.3)' },
+  channelBtnBle:  { borderColor: 'rgba(74,154,255,0.35)' },
+  channelBtnText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   hud:            { position: 'absolute', top: 16, right: 16, flexDirection: 'row', gap: 8 },
   hudItem:        { backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(125,251,140,0.15)', alignItems: 'center' },
   hudLabel:       { color: '#6C7473', fontSize: 8, fontWeight: '700', letterSpacing: 0.8 },
@@ -935,12 +1104,14 @@ const lsStyles = StyleSheet.create({
   ringActive:     { color: '#7DFB8C' },
   stick:          { width: 44, height: 44, borderRadius: 22, backgroundColor: '#58C95F', alignItems: 'center', justifyContent: 'center' },
   stickInner:     { alignItems: 'center', justifyContent: 'center' },
-  // Camera swipe zone — right 60% of the screen
-  camSwipeOverlay: { position: 'absolute', top: 60, bottom: 0, left: '40%', right: 0 },
-  camSwipeHint:    { position: 'absolute', bottom: 60, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  camSwipeHintText:{ color: 'rgba(255,255,255,0.4)', fontSize: 10 },
   cmdBadge:       { position: 'absolute', bottom: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(114,248,138,0.3)' },
   cmdBadgeText:   { color: '#72F88A', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  gyroBtn:        { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(88,201,95,0.3)' },
+  gyroBtnActive:  { backgroundColor: '#58C95F', borderColor: '#58C95F' },
+  gyroBtnText:    { color: '#58C95F', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  gyroBtnTextActive: { color: '#070A0A' },
+  gyroBadge:      { position: 'absolute', top: -10, alignSelf: 'center', backgroundColor: '#58C95F', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  gyroBadgeText:  { color: '#070A0A', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
 });
 
 const cameraOverlayStyles = StyleSheet.create({
@@ -948,11 +1119,28 @@ const cameraOverlayStyles = StyleSheet.create({
   toggleBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });
 
-const camOverlay = StyleSheet.create({
-  // Full overlay on the video box, captures swipe gestures
-  swipeZone:     { ...StyleSheet.absoluteFillObject, zIndex: 2 },
-  swipeHint:     { position: 'absolute', bottom: 36, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  swipeHintText: { color: 'rgba(255,255,255,0.35)', fontSize: 10 },
+// Camera pan control — faint reticle centered on the feed showing the pivot
+// point, drag direction arrows, and the current drag offset.
+const camPanStyles = StyleSheet.create({
+  ring: {
+    position: 'absolute', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 999, alignItems: 'center', justifyContent: 'center',
+  },
+  arrow:       { position: 'absolute', color: 'rgba(255,255,255,0.35)', fontSize: 14, fontWeight: '700' },
+  arrowUp:     { top: 4 },
+  arrowDown:   { bottom: 4 },
+  arrowLeft:   { left: 4 },
+  arrowRight:  { right: 4 },
+  arrowActive: { color: '#58C95F' },
+  dot: {
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: 'rgba(88,201,95,0.85)',
+  },
+});
+
+const joyStyles = StyleSheet.create({
+  gyroBadge:     { position: 'absolute', top: -10, alignSelf: 'center', backgroundColor: '#58C95F', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  gyroBadgeText: { color: '#070A0A', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
 });
 
 const cmdStyles = StyleSheet.create({
@@ -965,4 +1153,20 @@ const mqttBadgeStyle = StyleSheet.create({
   wrap: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(245,158,11,0.1)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)', alignSelf: 'flex-start', marginTop: 6 },
   dot:  { width: 6, height: 6, borderRadius: 3 },
   text: { fontSize: 9, fontWeight: '800', color: '#F59E0B', letterSpacing: 0.8 },
+});
+
+const channelStyle = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  btn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+    borderWidth: 1, borderColor: '#1E2A1E', backgroundColor: '#0D1410',
+  },
+  btnActive:    { backgroundColor: '#58C95F', borderColor: '#58C95F' },
+  btnText:      { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, color: '#7C8A86' },
+  btnTextActive:{ color: '#070A0A' },
+  statusWrap: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(74,154,255,0.1)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(74,154,255,0.25)' },
+  statusDot:  { width: 6, height: 6, borderRadius: 3 },
+  statusText: { fontSize: 9, fontWeight: '700', color: '#4A9AFF', letterSpacing: 0.4 },
+  retryBtn:   { marginLeft: 2 },
 });

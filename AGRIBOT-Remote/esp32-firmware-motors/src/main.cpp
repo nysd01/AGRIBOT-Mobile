@@ -8,6 +8,7 @@
 #include <PubSubClient.h>
 #include <ESPmDNS.h>
 #include <WiFiUdp.h>
+#include <NimBLEDevice.h>
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  AGRIBOT-MOTORS  v5.0  — Motor Controller with MQTT
@@ -24,8 +25,11 @@
 //  Online mode:  Phone ──[MQTT wss]──► HiveMQ ──[MQTT tcp]──► this ESP32
 //                 or  Phone ──[HTTP, joined "AGRIBOT-MOTORS" @192.168.4.100]──► this ESP32
 //  Offline mode: Phone ──► ESP32-Sensors ──[HTTP GET]──► this ESP32
+//             or  Phone ──[BLE GATT write]──► this ESP32  (no WiFi needed at all)
 //
-//  Bluetooth is always active for serial debug (name: "AGRIBOT-MOTORS").
+//  BLE GATT server (NimBLE) is always advertising as "AGRIBOT-MOTORS" — lets
+//  the phone send the same command strings (M../S/CU/CD/CX/CY/CS) directly
+//  over Bluetooth when WiFi is unavailable or too slow.
 //  NeoPixel LEDs (pin 23, 6 LEDs) show current state at a glance.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -53,6 +57,14 @@ const IPAddress MOTORS_AP_SUBNET(255, 255, 255, 0);
 WiFiUDP cmdUdp;
 const uint16_t CMD_UDP_PORT = 4210;
 
+// ── Command channel (BLE GATT, fire-and-forget) ──────────────────────────────
+// Lets the phone send commands directly over Bluetooth when there's no WiFi
+// link to the robot at all (or it's flaky). Same command strings as UDP/HTTP.
+#define BLE_DEVICE_NAME       "AGRIBOT-MOTORS"
+#define BLE_SERVICE_UUID      "8e3b1a40-7c2e-4a1a-9c3a-1f6e2b9d4c10"
+#define BLE_CMD_CHAR_UUID     "8e3b1a41-7c2e-4a1a-9c3a-1f6e2b9d4c10"
+NimBLECharacteristic* bleCmdChar = nullptr;
+
 // ── IBT2 Motor Drivers ────────────────────────────────────────────────────────
 #define RPWM1  25
 #define LPWM1  26
@@ -63,20 +75,16 @@ const uint16_t CMD_UDP_PORT = 4210;
 #define REN2   18
 #define LEN2   19
 
-// ── Camera Pan/Tilt — 4-wire stepper ─────────────────────────────────────────
-#define CAM_IN1 12
-#define CAM_IN2 13
-#define CAM_IN3 14
-#define CAM_IN4 27
+// ── Camera Pan/Tilt — 2x DC motor via L298N (direction pins only) ────────────
+// Pin pairs were swapped vs the original wiring notes after on-robot testing:
+// pin13 HIGH actually drives RIGHT (not left), and pin14 HIGH drives DOWN (not
+// up), so the LEFT/RIGHT and UP/DOWN pins are assigned to match real motion.
+#define CAM_PAN_LEFT   12   // HIGH = pan left
+#define CAM_PAN_RIGHT  13   // HIGH = pan right
+#define CAM_TILT_UP    2   // HIGH = tilt up
+#define CAM_TILT_DOWN  14   // HIGH = tilt down
 
-static const uint8_t STEP_SEQ[8][4] = {
-  {1,0,0,0}, {1,1,0,0}, {0,1,0,0}, {0,1,1,0},
-  {0,0,1,0}, {0,0,1,1}, {0,0,0,1}, {1,0,0,1}
-};
-int           camStepIdx  = 0;
-char          camDir      = 0;
-unsigned long lastCamStep = 0;
-const unsigned long CAM_STEP_MS = 4;
+char camDir = 0;   // 'U'/'D'/'X'(left)/'Y'(right)/0 = stop
 
 // ── NeoPixel status LED ───────────────────────────────────────────────────────
 #define PIXEL_PIN   23
@@ -141,17 +149,13 @@ void stopMotors() {
   motorsRunning = false;
 }
 
-void stepCamera() {
-  if (!camDir) return;
-  if (millis() - lastCamStep < CAM_STEP_MS) return;
-  lastCamStep = millis();
-  camStepIdx = (camDir == 'U' || camDir == 'X')
-    ? (camStepIdx + 1) % 8
-    : (camStepIdx + 7) % 8;
-  digitalWrite(CAM_IN1, STEP_SEQ[camStepIdx][0]);
-  digitalWrite(CAM_IN2, STEP_SEQ[camStepIdx][1]);
-  digitalWrite(CAM_IN3, STEP_SEQ[camStepIdx][2]);
-  digitalWrite(CAM_IN4, STEP_SEQ[camStepIdx][3]);
+// Drives the two camera DC motors directly from camDir — HIGH on exactly one
+// direction pin per axis, everything else LOW (camDir == 0 -> all LOW -> stop).
+void applyCameraDir() {
+  digitalWrite(CAM_PAN_LEFT,  camDir == 'X');
+  digitalWrite(CAM_PAN_RIGHT, camDir == 'Y');
+  digitalWrite(CAM_TILT_UP,   camDir == 'U');
+  digitalWrite(CAM_TILT_DOWN, camDir == 'D');
 }
 
 void executeCmd(const String& cmd) {
@@ -160,6 +164,7 @@ void executeCmd(const String& cmd) {
   if (cmd == "S") {
     stopMotors();
     camDir = 0;
+    applyCameraDir();
     setAllPixels(onRouterWifi ? COL_PURPLE : COL_GREEN);
 
   } else if (cmd.length() > 1 && cmd[0] == 'M') {
@@ -174,14 +179,13 @@ void executeCmd(const String& cmd) {
       setAllPixels(onRouterWifi ? COL_CYAN : COL_BLUE);
     }
 
-  } else if (cmd == "CU") { camDir = 'U'; }
-  else if   (cmd == "CD") { camDir = 'D'; }
-  else if   (cmd == "CX") { camDir = 'X'; }
-  else if   (cmd == "CY") { camDir = 'Y'; }
+  } else if (cmd == "CU") { camDir = 'U'; applyCameraDir(); }
+  else if   (cmd == "CD") { camDir = 'D'; applyCameraDir(); }
+  else if   (cmd == "CX") { camDir = 'X'; applyCameraDir(); }
+  else if   (cmd == "CY") { camDir = 'Y'; applyCameraDir(); }
   else if   (cmd == "CS") {
     camDir = 0;
-    digitalWrite(CAM_IN1, 0); digitalWrite(CAM_IN2, 0);
-    digitalWrite(CAM_IN3, 0); digitalWrite(CAM_IN4, 0);
+    applyCameraDir();
   } else if (cmd == "WIFI_FORGET") {
     // Reachable via MQTT even when Motors is on the router (not AGRIBOT-ESP),
     // which is the only case the HTTP /wifi-forget endpoint can't reach.
@@ -193,6 +197,52 @@ void executeCmd(const String& cmd) {
     delay(200);
     ESP.restart();
   }
+}
+
+// ── BLE GATT server ───────────────────────────────────────────────────────────
+
+class BleCmdCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* chr) {
+    String cmd = String(chr->getValue().c_str());
+    cmd.trim();
+    if (cmd.length() > 0) {
+      Serial.printf("[BLE] Received: %s\n", cmd.c_str());
+      executeCmd(cmd);
+    }
+  }
+};
+
+class BleServerCallbacks : public NimBLEServerCallbacks {
+  void onConnect(NimBLEServer* srv) {
+    Serial.println(F("[BLE] Phone connected"));
+  }
+  void onDisconnect(NimBLEServer* srv) {
+    Serial.println(F("[BLE] Phone disconnected — resume advertising"));
+    stopMotors();
+    camDir = 0;
+    applyCameraDir();
+    NimBLEDevice::startAdvertising();
+  }
+};
+
+void setupBle() {
+  NimBLEDevice::init(BLE_DEVICE_NAME);
+  NimBLEServer* bleServer = NimBLEDevice::createServer();
+  bleServer->setCallbacks(new BleServerCallbacks());
+
+  NimBLEService* svc = bleServer->createService(BLE_SERVICE_UUID);
+  bleCmdChar = svc->createCharacteristic(
+    BLE_CMD_CHAR_UUID,
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+  );
+  bleCmdChar->setCallbacks(new BleCmdCallbacks());
+  svc->start();
+
+  NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  adv->addServiceUUID(BLE_SERVICE_UUID);
+  adv->start();
+
+  Serial.println(F("[BLE] Advertising as \"AGRIBOT-MOTORS\""));
 }
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
@@ -224,7 +274,7 @@ void handleHealth() {
   doc["wifiMode"]     = onRouterWifi ? "router" : "ap";
   doc["mqttEnabled"]  = mqttEnabled;
   doc["mqttConnected"]= mqttClient.connected();
-  doc["bt"]           = "disabled";
+  doc["ble"]          = "AGRIBOT-MOTORS";
 
   if (WiFi.status() == WL_CONNECTED) {
     doc["ssid"] = WiFi.SSID();
@@ -529,12 +579,12 @@ void setup() {
   stopMotors();
   Serial.println(F("[Motors] IBT2 ready"));
 
-  // Camera stepper
-  pinMode(CAM_IN1, OUTPUT); digitalWrite(CAM_IN1, 0);
-  pinMode(CAM_IN2, OUTPUT); digitalWrite(CAM_IN2, 0);
-  pinMode(CAM_IN3, OUTPUT); digitalWrite(CAM_IN3, 0);
-  pinMode(CAM_IN4, OUTPUT); digitalWrite(CAM_IN4, 0);
-  Serial.println(F("[Camera] Stepper ready"));
+  // Camera pan/tilt — 2x DC motor via L298N, direction pins only
+  pinMode(CAM_PAN_LEFT,  OUTPUT); digitalWrite(CAM_PAN_LEFT,  LOW);
+  pinMode(CAM_PAN_RIGHT, OUTPUT); digitalWrite(CAM_PAN_RIGHT, LOW);
+  pinMode(CAM_TILT_UP,   OUTPUT); digitalWrite(CAM_TILT_UP,   LOW);
+  pinMode(CAM_TILT_DOWN, OUTPUT); digitalWrite(CAM_TILT_DOWN, LOW);
+  Serial.println(F("[Camera] Pan/tilt ready"));
 
   // Load saved router WiFi
   prefs.begin("wifi", true);
@@ -555,12 +605,22 @@ void setup() {
   Serial.printf("[MQTT] Config: %s:%d  topic=%s\n",
     mqttHost.c_str(), mqttPort, mqttTopic.c_str());
 
+  // BLE must come up BEFORE WiFi — esp_bt_controller_enable() aborts in
+  // coex_core_enable() if the WiFi controller has already been started
+  // (the coexistence subsystem expects BT init first).
+  setupBle();
+
   // Init WiFi driver with STA interface up BEFORE any config/connect calls.
   // persistent(false) stops NVS-cached credentials from overriding WiFi.config().
   // Having the interface alive when WiFi.config() is called ensures
   // tcpip_adapter_dhcpc_stop() succeeds → static IP sticks.
   WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
+  // NOTE: WiFi.setSleep(false) is NOT used here (unlike ESP32-Sensors) —
+  // with BLE active, the ESP-IDF WiFi/BT coexistence layer requires modem
+  // sleep to stay enabled (aborts with "Should enable WiFi modem sleep
+  // when both WiFi and Bluetooth are enabled" otherwise). The BLE command
+  // channel bypasses WiFi entirely and isn't affected by this.
   delay(100);
 
   // Skip TLS certificate verification — avoids shipping a CA bundle on the device.
@@ -603,7 +663,7 @@ void setup() {
 
   Serial.printf("[HTTP] Ready → http://%s\n", WiFi.localIP().toString().c_str());
   Serial.printf("[UDP]  Cmd channel listening on :%d\n", CMD_UDP_PORT);
-  Serial.println(F("[BT]   Connect to 'AGRIBOT-MOTORS' for serial debug"));
+  Serial.println(F("[BLE]  Advertising as 'AGRIBOT-MOTORS' for direct phone control"));
   Serial.println(F("========================================\n"));
 }
 
@@ -624,8 +684,6 @@ void loop() {
       if (cmd.length() > 0) executeCmd(cmd);
     }
   }
-
-  stepCamera();
 
   // Motor watchdog
   if (motorsRunning && millis() - lastMotorCmd > WATCHDOG_MS) {
