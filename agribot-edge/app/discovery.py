@@ -49,10 +49,13 @@ class Advertiser:
                 properties={"service": "agribot-edge", "health": "/health"},
                 server=HOSTNAME,
             )
-            self._zc.register_service(self._info)
+            # allow_name_change: if a stale registration from an unclean previous
+            # shutdown still lingers on the network, append a suffix instead of
+            # raising NonUniqueNameException (whose str() is empty → blank logs).
+            self._zc.register_service(self._info, allow_name_change=True)
             log.info("mDNS: %s advertised at %s:%s (%s)", SERVICE_TYPE, ip, settings.port, HOSTNAME)
         except Exception as exc:  # never let discovery block the service
-            log.warning("mDNS advertise failed: %s", exc)
+            log.warning("mDNS advertise failed: %r", exc)  # %r shows the type even when str() is empty
             self._zc = None
             self._info = None
 
