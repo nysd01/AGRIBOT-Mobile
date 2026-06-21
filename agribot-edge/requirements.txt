@@ -1,0 +1,10 @@
+# AGRI-PC edge hub — Python dependencies
+fastapi>=0.110
+uvicorn[standard]>=0.29
+aiortc>=1.6          # WebRTC peer (camera + mic) — pulls in `av` and `aioice`
+av>=11               # FFmpeg bindings used by aiortc MediaPlayer (dshow capture on Windows)
+paho-mqtt>=1.6,<2.0  # local Mosquitto ingest (v1 callback API)
+asyncpg>=0.29        # Postgres async driver
+httpx>=0.27          # Supabase REST sync
+pydantic-settings>=2.2
+python-dotenv>=1.0
