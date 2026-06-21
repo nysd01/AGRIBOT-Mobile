@@ -67,7 +67,8 @@ behind NAT — direct P2P usually fails, so you must:
 ## Status / next phases
 
 - [x] Phase 1 — service skeleton: `/health`, `/offer` (WebRTC), `/snapshots`, Postgres, MQTT ingest, sync agent
-- [ ] Phase 2 — phone side: `react-native-webrtc` dev build + `RemoteCameraFeed` (replaces the `CameraView` placeholder in `app/(tabs)/remote.tsx`)
+- [x] mDNS discovery — advertises `_agribot-edge._tcp` / `agribot-edge.local` so the phone finds AGRI-PC with no hardcoded IP (`app/discovery.py`)
+- [ ] Phase 2 — phone side: `react-native-webrtc` + `react-native-zeroconf` dev build + `RemoteCameraFeed` (replaces the `CameraView` placeholder in `app/(tabs)/remote.tsx`)
 - [ ] Phase 3 — `use-mqtt.ts` broker switch (online HiveMQ / offline Mosquitto) + ESP32s join AGRI-PC hotspot
 - [ ] Phase 4 — analytics dual-source (`/snapshots` offline, Supabase online)
 - [ ] Online signaling exposure (tunnel) + TURN provisioning

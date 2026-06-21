@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from . import db, webrtc
 from .config import settings
+from .discovery import Advertiser
 from .mqtt_ingest import MqttIngest
 from .sync import SyncAgent
 
@@ -26,6 +27,7 @@ log = logging.getLogger("agribot.main")
 
 ingest = MqttIngest()
 syncer = SyncAgent()
+advertiser = Advertiser()
 
 
 @asynccontextmanager
@@ -33,10 +35,12 @@ async def lifespan(app: FastAPI):
     await db.init_pool()
     ingest.start()
     syncer.start()
+    advertiser.start()
     log.info("AGRI-PC edge hub up on %s:%s", settings.host, settings.port)
     try:
         yield
     finally:
+        advertiser.stop()
         syncer.stop()
         ingest.stop()
         await webrtc.close_all()
