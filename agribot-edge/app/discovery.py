@@ -4,12 +4,16 @@ Publishes a `_agribot-edge._tcp` service and maps the name `agribot-edge.local`
 to AGRI-PC's current LAN IP. The phone discovers this (react-native-zeroconf),
 resolves the real IP, and points all offline endpoints at it — so changing the
 router/network needs zero edits in the app.
+
+Uses the ASYNC zeroconf API (AsyncZeroconf): the sync `Zeroconf` facade blocks
+the running asyncio loop long enough to trip zeroconf's EventLoopBlocked guard.
 """
 
 import logging
 import socket
 
-from zeroconf import ServiceInfo, Zeroconf
+from zeroconf import ServiceInfo
+from zeroconf.asyncio import AsyncZeroconf
 
 from .config import settings
 
@@ -34,13 +38,12 @@ def _primary_ip() -> str:
 
 class Advertiser:
     def __init__(self) -> None:
-        self._zc: Zeroconf | None = None
+        self._aiozc: AsyncZeroconf | None = None
         self._info: ServiceInfo | None = None
 
-    def start(self) -> None:
+    async def start(self) -> None:
         try:
             ip = _primary_ip()
-            self._zc = Zeroconf()
             self._info = ServiceInfo(
                 SERVICE_TYPE,
                 SERVICE_NAME,
@@ -49,24 +52,30 @@ class Advertiser:
                 properties={"service": "agribot-edge", "health": "/health"},
                 server=HOSTNAME,
             )
+            self._aiozc = AsyncZeroconf()
             # allow_name_change: if a stale registration from an unclean previous
-            # shutdown still lingers on the network, append a suffix instead of
-            # raising NonUniqueNameException (whose str() is empty → blank logs).
-            self._zc.register_service(self._info, allow_name_change=True)
+            # shutdown still lingers, append a suffix instead of raising
+            # NonUniqueNameException (whose str() is empty → blank logs).
+            await self._aiozc.async_register_service(self._info, allow_name_change=True)
             log.info("mDNS: %s advertised at %s:%s (%s)", SERVICE_TYPE, ip, settings.port, HOSTNAME)
         except Exception as exc:  # never let discovery block the service
             log.warning("mDNS advertise failed: %r", exc)  # %r shows the type even when str() is empty
-            self._zc = None
-            self._info = None
+            await self._safe_close()
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         try:
-            if self._zc is not None and self._info is not None:
-                self._zc.unregister_service(self._info)
-            if self._zc is not None:
-                self._zc.close()
+            if self._aiozc is not None and self._info is not None:
+                await self._aiozc.async_unregister_service(self._info)
+        except Exception:
+            pass
+        await self._safe_close()
+
+    async def _safe_close(self) -> None:
+        try:
+            if self._aiozc is not None:
+                await self._aiozc.async_close()
         except Exception:
             pass
         finally:
-            self._zc = None
+            self._aiozc = None
             self._info = None

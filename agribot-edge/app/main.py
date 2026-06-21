@@ -35,12 +35,12 @@ async def lifespan(app: FastAPI):
     await db.init_pool()
     ingest.start()
     syncer.start()
-    advertiser.start()
+    await advertiser.start()
     log.info("AGRI-PC edge hub up on %s:%s", settings.host, settings.port)
     try:
         yield
     finally:
-        advertiser.stop()
+        await advertiser.stop()
         syncer.stop()
         ingest.stop()
         await webrtc.close_all()
