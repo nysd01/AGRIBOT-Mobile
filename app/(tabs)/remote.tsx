@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Accelerometer } from 'expo-sensors';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { RemoteCameraFeed } from '@/components/RemoteCameraFeed';
 import { remoteStyles } from '@/styles/remote.styles';
 import { useESP32Sensors } from '@/hooks/use-esp32-sensors';
 import { useESP32IP } from '@/context/ESP32Context';
@@ -133,7 +133,7 @@ function PathChart({ trail, waypoints, onTap, drawMode }: {
 
 const LandscapeCameraFeed = React.memo(function LandscapeCameraFeed({ active }: { active: boolean }) {
   return active ? (
-    <CameraView style={StyleSheet.absoluteFill} facing="back" />
+    <RemoteCameraFeed style={StyleSheet.absoluteFill} />
   ) : (
     <View style={[StyleSheet.absoluteFill, lsStyles.offBg]}>
       <MaterialCommunityIcons name="robot-industrial" size={180} color="#58C95F" style={{ opacity: 0.12 }} />
@@ -143,7 +143,7 @@ const LandscapeCameraFeed = React.memo(function LandscapeCameraFeed({ active }: 
 
 const PortraitCameraFeed = React.memo(function PortraitCameraFeed({ active }: { active: boolean }) {
   return active ? (
-    <CameraView style={StyleSheet.absoluteFill} facing="back" />
+    <RemoteCameraFeed style={StyleSheet.absoluteFill} />
   ) : (
     <>
       <MaterialCommunityIcons name="robot-industrial" size={120} color="#58C95F" style={{ opacity: 0.5 }} />
@@ -279,7 +279,6 @@ export default function RemoteScreen() {
   const [stickPos,       setStickPos]       = useState({ x: 0, y: 0 });
   const [gyroEnabled,    setGyroEnabled]    = useState(false);
   const [cameraActive,   setCameraActive]   = useState(false);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [drawMode,       setDrawMode]       = useState(false);
   const [userWaypoints,  setUserWaypoints]  = useState<NormPoint[]>([]);
   const [gpsTrail,       setGpsTrail]       = useState<Coord[]>([]);
@@ -317,17 +316,9 @@ export default function RemoteScreen() {
   }, [gpsData]);
 
   // ── Camera toggle ──────────────────────────────────────────────────────────
-  const handleCameraToggle = async () => {
-    if (!cameraActive) {
-      if (!cameraPermission?.granted) {
-        const result = await requestCameraPermission();
-        if (!result.granted) return;
-      }
-      setCameraActive(true);
-    } else {
-      setCameraActive(false);
-    }
-  };
+  // The feed is AGRI-PC's camera over WebRTC (RemoteCameraFeed), so no phone-camera
+  // permission is needed — just toggle visibility.
+  const handleCameraToggle = () => setCameraActive((on) => !on);
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  COMMAND SENDER — dual mode

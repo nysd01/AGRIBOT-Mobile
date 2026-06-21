@@ -79,6 +79,9 @@ export interface AppModeContextValue {
   mqttConfig:      MqttConfig | null;
   setMqttConfig:   (cfg: MqttConfig) => void;
   clearMqtt:       () => void;
+  /** AGRI-PC host (IP or hostname) for offline edge endpoints — manual override of mDNS discovery */
+  edgeHost:        string | null;
+  setEdgeHost:     (host: string | null) => void;
   /** true when mode === 'online' AND serverUrl is set */
   isOnline:        boolean;
   /** true when mode === 'online', regardless of cloud config — use for MQTT/motor-command routing */
@@ -92,6 +95,7 @@ export interface AppModeContextValue {
 const KEY_MODE  = 'agribot_app_mode';
 const KEY_CLOUD = 'agribot_cloud_config';
 const KEY_MQTT  = 'agribot_mqtt_config';
+const KEY_EDGE  = 'agribot_edge_host';
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -104,6 +108,8 @@ const AppModeContext = createContext<AppModeContextValue>({
   mqttConfig:     null,
   setMqttConfig:  () => {},
   clearMqtt:      () => {},
+  edgeHost:       null,
+  setEdgeHost:    () => {},
   isOnline:       false,
   isOnlineMode:   false,
   ready:          false,
@@ -115,6 +121,7 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
   const [mode,  setModeState]  = useState<AppMode>('offline');
   const [cloud, setCloudState] = useState<CloudConfig | null>(null);
   const [mqtt,  setMqttState]  = useState<MqttConfig | null>(null);
+  const [edge,  setEdgeState]  = useState<string | null>(null);
   const [ready, setReady]      = useState(false);
 
   useEffect(() => {
@@ -122,13 +129,15 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
       storage.getItem(KEY_MODE),
       storage.getItem(KEY_CLOUD),
       storage.getItem(KEY_MQTT),
-    ]).then(([savedMode, savedCloud, savedMqtt]) => {
+      storage.getItem(KEY_EDGE),
+    ]).then(([savedMode, savedCloud, savedMqtt, savedEdge]) => {
       if (savedCloud) {
         try { setCloudState(JSON.parse(savedCloud) as CloudConfig); } catch {}
       }
       if (savedMqtt) {
         try { setMqttState(JSON.parse(savedMqtt) as MqttConfig); } catch {}
       }
+      if (savedEdge) setEdgeState(savedEdge);
 
       if (Platform.OS === 'web') {
         if (!savedCloud) setCloudState(WEB_DEFAULT_CLOUD);
@@ -167,6 +176,12 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
     storage.removeItem(KEY_MQTT).catch(() => {});
   }, []);
 
+  const setEdgeHost = useCallback((host: string | null) => {
+    setEdgeState(host);
+    if (host) storage.setItem(KEY_EDGE, host).catch(() => {});
+    else storage.removeItem(KEY_EDGE).catch(() => {});
+  }, []);
+
   const isOnline = Platform.OS === 'web'
     ? !!cloud?.serverUrl
     : mode === 'online' && !!cloud?.serverUrl;
@@ -179,6 +194,7 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
         mode, setMode,
         cloudConfig: cloud, setCloudConfig, clearCloud,
         mqttConfig: mqtt, setMqttConfig, clearMqtt,
+        edgeHost: edge, setEdgeHost,
         isOnline, isOnlineMode, ready,
       }}
     >
