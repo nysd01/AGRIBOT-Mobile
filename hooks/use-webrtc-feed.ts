@@ -44,7 +44,18 @@ export function useWebrtcFeed(signalingUrl: string | null, iceServers: IceServer
     }
 
     let cancelled = false;
-    const pc = new RTCPeerConnection({ iceServers });
+
+    // RTCPeerConnection construction can throw ("Failed to initialize
+    // PeerConnection") on native resource pressure — degrade to a failed state
+    // instead of crashing the screen with a red error box.
+    let pc: RTCPeerConnection;
+    try {
+      pc = new RTCPeerConnection({ iceServers });
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to initialize PeerConnection');
+      setStatus('failed');
+      return;
+    }
     pcRef.current = pc;
     setStatus('connecting');
     setError(null);

@@ -41,8 +41,16 @@ export function useEdgeDiscovery(enabled = true) {
     const onResolved = (svc: any) => {
       const addrs: string[] = svc?.addresses ?? [];
       const ipv4 = addrs.find((a) => a.includes('.') && !a.includes(':'));
-      const host = ipv4 ?? svc?.host;
-      if (host) setService({ host, port: svc?.port ?? 8000, name: svc?.name ?? 'AGRI-PC' });
+      // Require a stable IPv4 and de-dupe: returning the same object when nothing
+      // changed avoids re-rendering consumers (and re-creating the WebRTC peer)
+      // every time mDNS re-resolves the same service.
+      if (!ipv4) return;
+      const port = svc?.port ?? 8000;
+      setService((prev) =>
+        prev && prev.host === ipv4 && prev.port === port
+          ? prev
+          : { host: ipv4, port, name: svc?.name ?? 'AGRI-PC' },
+      );
     };
 
     zc.on('resolved', onResolved);
