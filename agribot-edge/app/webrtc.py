@@ -20,6 +20,7 @@ from aiortc import (
 )
 from aiortc.contrib.media import MediaPlayer, MediaRelay
 
+from .camera import ProcessedVideoTrack
 from .config import settings
 
 log = logging.getLogger("agribot.webrtc")
@@ -28,6 +29,7 @@ _pcs: set[RTCPeerConnection] = set()
 _relay: MediaRelay | None = None
 _video_player: MediaPlayer | None = None
 _audio_player: MediaPlayer | None = None
+_processed: ProcessedVideoTrack | None = None  # camera frames after zoom/face pipeline
 _media_lock = asyncio.Lock()
 
 
@@ -51,7 +53,7 @@ def ice_summary() -> dict:
 
 async def _ensure_media() -> tuple[object | None, object | None]:
     """Open the camera/mic once; return relay-backed tracks (video, audio)."""
-    global _relay, _video_player, _audio_player
+    global _relay, _video_player, _audio_player, _processed
     async with _media_lock:
         if _relay is None:
             _relay = MediaRelay()
@@ -77,7 +79,12 @@ async def _ensure_media() -> tuple[object | None, object | None]:
             except Exception as exc:
                 log.warning("mic open failed (%s): %s", settings.audio_device, exc)
 
-    video = _relay.subscribe(_video_player.video) if _video_player and _video_player.video else None
+        # Wrap the raw webcam track once with the processing pipeline (zoom/face),
+        # then fan it out to every peer via the relay.
+        if _processed is None and _video_player and _video_player.video:
+            _processed = ProcessedVideoTrack(_video_player.video)
+
+    video = _relay.subscribe(_processed) if _processed else None
     audio = _relay.subscribe(_audio_player.audio) if _audio_player and _audio_player.audio else None
     return video, audio
 

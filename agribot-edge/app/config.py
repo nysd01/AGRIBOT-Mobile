@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     mqtt_host: str = "localhost"
     mqtt_port: int = 1883
     mqtt_sensors_topic: str = "agribot/sensors"
+    mqtt_cmd_topic: str = "agribot/motors/cmd"  # face-follow pan/tilt + manual-priority watch
 
     # Supabase sync
     supabase_url: str = ""
