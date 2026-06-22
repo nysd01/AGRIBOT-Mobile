@@ -88,7 +88,8 @@ export function useWebrtcFeed(signalingUrl: string | null, iceServers: IceServer
         const base = signalingUrl.replace(/\/+$/, ''); // tolerate trailing slash
         const res = await fetch(`${base}/offer`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          // ngrok-skip-browser-warning bypasses free-ngrok's interstitial page; harmless otherwise.
+          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
           body: JSON.stringify({
             sdp: pc.localDescription?.sdp,
             type: pc.localDescription?.type,
