@@ -19,7 +19,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { RTCView } from 'react-native-webrtc';
 import { useAppMode } from '@/context/AppModeContext';
-import { useEdgeDiscovery } from '@/hooks/use-edge-discovery';
+import { useEdgeBaseUrl } from '@/hooks/use-edge-base';
 import { useWebrtcFeed, type IceServer } from '@/hooks/use-webrtc-feed';
 
 const STUN: IceServer = { urls: 'stun:stun.l.google.com:19302' };
@@ -29,18 +29,8 @@ export const RemoteCameraFeed = React.memo(function RemoteCameraFeed({
 }: {
   style?: StyleProp<ViewStyle>;
 }) {
-  const { edgeHost, streamConfig, isOnlineMode } = useAppMode();
-
-  // Discovery only makes sense on the LAN (offline); online uses the tunnel URL.
-  const { service } = useEdgeDiscovery(!isOnlineMode);
-  const lanHost = edgeHost || service?.host || null;
-  const lanPort = service?.port ?? 8000;
-
-  const signalingUrl = isOnlineMode
-    ? streamConfig?.onlineUrl?.trim() || null
-    : lanHost
-      ? `http://${lanHost}:${lanPort}`
-      : null;
+  const { streamConfig, isOnlineMode } = useAppMode();
+  const { baseUrl: signalingUrl } = useEdgeBaseUrl();
 
   const iceServers = useMemo<IceServer[]>(() => {
     const list: IceServer[] = [STUN];

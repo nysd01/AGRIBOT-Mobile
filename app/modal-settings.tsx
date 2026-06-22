@@ -380,6 +380,21 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Media */}
+        <View style={settingsStyles.section}>
+          <Text style={settingsStyles.sectionTitle}>Media</Text>
+          <Pressable style={settingsStyles.settingItem} onPress={() => router.push('/gallery')}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <MaterialCommunityIcons name="image-multiple" size={22} color="#58C95F" />
+              <View>
+                <Text style={settingsStyles.settingLabel}>Gallery</Text>
+                <Text style={settingsStyles.settingDescription}>Photos & videos captured by AGRI-PC</Text>
+              </View>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={20} color="#6C7473" />
+          </Pressable>
+        </View>
+
         {/* Security Settings */}
         {biometricSupported ? (
           <View style={settingsStyles.section}>

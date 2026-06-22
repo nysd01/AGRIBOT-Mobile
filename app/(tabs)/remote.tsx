@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Accelerometer } from 'expo-sensors';
 import { RemoteCameraFeed } from '@/components/RemoteCameraFeed';
+import { CameraControls } from '@/components/CameraControls';
 import { remoteStyles } from '@/styles/remote.styles';
 import { useESP32Sensors } from '@/hooks/use-esp32-sensors';
 import { useESP32IP } from '@/context/ESP32Context';
@@ -573,6 +574,11 @@ export default function RemoteScreen() {
         {/* ── Drag anywhere on the camera to pan, pivoting from its center ── */}
         {cameraActive && <CameraPanControl sendCamDir={sendCamDir} ringSize={150} />}
 
+        {/* Capture / zoom / face-track controls (bottom-center) */}
+        {cameraActive && (
+          <CameraControls active style={{ position: 'absolute', bottom: 16, left: 0, right: 0 }} />
+        )}
+
         {/* Top-left */}
         <View style={lsStyles.topLeft}>
           <View style={lsStyles.modeBadge}>
@@ -940,6 +946,10 @@ export default function RemoteScreen() {
                 <PortraitCameraFeed active={cameraActive} />
 
                 {cameraActive && <CameraPanControl sendCamDir={sendCamDir} ringSize={90} />}
+
+                {cameraActive && (
+                  <CameraControls active style={{ position: 'absolute', bottom: 12, left: 0, right: 0 }} />
+                )}
 
                 <Pressable onPress={() => void handleCameraToggle()} style={cameraOverlayStyles.toggleBtn}>
                   <MaterialCommunityIcons name={cameraActive ? 'camera-off' : 'camera'} size={18} color="#fff" />
