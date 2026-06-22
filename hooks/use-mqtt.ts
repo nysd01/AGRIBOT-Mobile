@@ -2,13 +2,14 @@
  * useMqtt — connects to an MQTT broker via WebSocket and exposes a stable
  * publishCmd() function for sending motor/camera commands.
  *
- * Online mode only: hook is a no-op when mode !== 'online' or mqttConfig is null.
- * Connection does NOT require a Supabase cloud config — MQTT is independent
- * of the cloud sensor-data path.
+ * Dual-mode broker selection:
+ *   ONLINE  → HiveMQ cloud (from mqttConfig)            ~40-80 ms
+ *             Phone ──[WSS]──► HiveMQ ──[TCP]──► ESP32-Motors
+ *   OFFLINE → AGRI-PC local Mosquitto over WebSocket:9001 (host = edgeHost)
+ *             Phone ──[WS]──► AGRI-PC Mosquitto ──[TCP:1883]──► ESP32-Motors
  *
- * Architecture:
- *   Phone ──[MQTT WSS]──► HiveMQ Cloud ──[MQTT TCP]──► ESP32-Motors
- *   Latency: ~40-80 ms end-to-end.
+ * (Offline requires AGRI-PC's Mosquitto to expose a websockets listener on 9001
+ *  and the AGRI-PC address to be set/discovered — see Network tab.)
  *
  * Stable publishCmd: the returned function is created once (empty deps) and
  * reads live state via refs, making it safe to store in a pan-responder ref.
@@ -46,40 +47,50 @@ if ((global as any).process.title !== 'browser') {
   (global as any).process.title = 'browser';
 }
 
+const LOCAL_WS_PORT = 9001; // AGRI-PC Mosquitto websockets listener
+
 export function useMqtt() {
-  const { isOnlineMode, mqttConfig } = useAppMode();
+  const { isOnlineMode, mqttConfig, edgeHost } = useAppMode();
 
   const clientRef    = useRef<any>(null);
   const connectedRef = useRef(false);
-  const configRef    = useRef(mqttConfig);
+  const prefixRef    = useRef(mqttConfig?.topicPrefix || 'agribot');
 
   const [mqttConnected, setMqttConnected] = useState(false);
 
-  // Keep configRef in sync
-  useEffect(() => { configRef.current = mqttConfig; }, [mqttConfig]);
+  // Topic prefix stays the same online/offline; keep a live ref for publishCmd.
+  useEffect(() => { prefixRef.current = mqttConfig?.topicPrefix || 'agribot'; }, [mqttConfig?.topicPrefix]);
 
   useEffect(() => {
-    if (!isOnlineMode || !mqttConfig) {
-      try { clientRef.current?.end(true); } catch { /* ignore */ }
-      clientRef.current  = null;
-      connectedRef.current = false;
-      setMqttConnected(false);
-      return;
-    }
-
-    const { host, useTls, username, password } = mqttConfig;
-    const wsPort   = useTls ? 8884 : 8000;
-    const protocol = useTls ? 'wss' : 'ws';
-    const brokerUrl = `${protocol}://${host}:${wsPort}/mqtt`;
-
+    // Pick the broker for the current mode.
+    let brokerUrl: string | null = null;
     const opts: Record<string, unknown> = {
       clientId:        `agribot_app_${Math.random().toString(16).slice(2, 10)}`,
       clean:           true,
       reconnectPeriod: 5000,
       connectTimeout:  10000,
     };
-    if (username) opts.username = username;
-    if (password) opts.password = password;
+
+    if (isOnlineMode) {
+      if (mqttConfig) {
+        const wsPort   = mqttConfig.useTls ? 8884 : 8000;
+        const protocol = mqttConfig.useTls ? 'wss' : 'ws';
+        brokerUrl = `${protocol}://${mqttConfig.host}:${wsPort}/mqtt`;
+        if (mqttConfig.username) opts.username = mqttConfig.username;
+        if (mqttConfig.password) opts.password = mqttConfig.password;
+      }
+    } else if (edgeHost) {
+      // Offline: AGRI-PC Mosquitto over plain WebSocket on the robot LAN.
+      brokerUrl = `ws://${edgeHost}:${LOCAL_WS_PORT}/mqtt`;
+    }
+
+    if (!brokerUrl) {
+      try { clientRef.current?.end(true); } catch { /* ignore */ }
+      clientRef.current  = null;
+      connectedRef.current = false;
+      setMqttConnected(false);
+      return;
+    }
 
     let mounted = true;
 
@@ -128,12 +139,12 @@ export function useMqtt() {
     };
   // Reconnect only when connection params change, not on every config object ref change
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnlineMode, mqttConfig?.host, mqttConfig?.useTls, mqttConfig?.username, mqttConfig?.password]);
+  }, [isOnlineMode, mqttConfig?.host, mqttConfig?.useTls, mqttConfig?.username, mqttConfig?.password, edgeHost]);
 
   // Stable publish — reads via refs so pan-responder closures don't go stale
   const publishCmd = useCallback((cmd: string): boolean => {
-    if (!clientRef.current || !connectedRef.current || !configRef.current) return false;
-    const topic = `${configRef.current.topicPrefix}/motors/cmd`;
+    if (!clientRef.current || !connectedRef.current) return false;
+    const topic = `${prefixRef.current}/motors/cmd`;
     try {
       clientRef.current.publish(topic, cmd, { qos: 0, retain: false });
       return true;

@@ -45,7 +45,7 @@ export default function WifiConnectionScreen() {
   const { espIP: globalEspIP, setEspIP: setGlobalEspIP, resetToAP } = useESP32IP();
 
   // Online / Offline mode + cloud config + MQTT
-  const { mode, setMode, cloudConfig, setCloudConfig, clearCloud, isOnline, isOnlineMode, mqttConfig, setMqttConfig, streamConfig, setStreamConfig } = useAppMode();
+  const { mode, setMode, cloudConfig, setCloudConfig, clearCloud, isOnline, isOnlineMode, mqttConfig, setMqttConfig, streamConfig, setStreamConfig, edgeHost, setEdgeHost } = useAppMode();
 
   // Live MQTT connection status (online mode only)
   const { mqttConnected, publishCmd } = useMqtt();
@@ -85,6 +85,9 @@ export default function WifiConnectionScreen() {
   const [turnUser,     setTurnUser]     = useState(streamConfig?.turnUsername ?? '');
   const [turnPass,     setTurnPass]     = useState(streamConfig?.turnPassword ?? '');
   const [showTurnPass, setShowTurnPass] = useState(false);
+
+  // AGRI-PC offline edge address (blank = mDNS auto-discover)
+  const [edgeHostInput, setEdgeHostInput] = useState(edgeHost ?? '');
 
   const {
     networks: savedNetworks,
@@ -437,6 +440,15 @@ export default function WifiConnectionScreen() {
       turnPassword: turnPass,
     });
     Alert.alert('Streaming Saved ✓', 'Online camera will use this tunnel + TURN relay.');
+  };
+
+  const handleSaveEdgeHost = () => {
+    const v = edgeHostInput.trim();
+    setEdgeHost(v || null);
+    Alert.alert(
+      v ? 'AGRI-PC Address Saved ✓' : 'Cleared ✓',
+      v ? `Offline camera + MQTT will use ${v}.` : 'Will auto-discover AGRI-PC via mDNS.',
+    );
   };
 
   /** Fill the form fields from a saved network */
@@ -1166,6 +1178,43 @@ export default function WifiConnectionScreen() {
           {/* ══════════════════════════════════════════
               Online / Offline Mode
           ══════════════════════════════════════════ */}
+          {/* ══════════════════════════════════════════
+              AGRI-PC Edge Hub (offline address)
+          ══════════════════════════════════════════ */}
+          <View style={s.card}>
+            <View style={s.cardTitleRow}>
+              <MaterialCommunityIcons name="server-network" size={16} color="#58C95F" />
+              <Text style={s.cardTitle}>AGRI-PC (Offline Edge)</Text>
+            </View>
+
+            <View style={[s.modeInfoBox, { borderColor: '#58C95F44' }]}>
+              <MaterialCommunityIcons name="information-outline" size={14} color="#58C95F" />
+              <Text style={s.modeInfoText}>
+                Address of AGRI-PC on the robot Wi-Fi — used in Offline mode for the camera and local MQTT. Leave blank to auto-discover it via mDNS (agribot-edge.local).
+              </Text>
+            </View>
+
+            <Text style={s.fieldLabel}>AGRI-PC Address (IP or host)</Text>
+            <TextInput
+              style={s.input}
+              value={edgeHostInput}
+              onChangeText={setEdgeHostInput}
+              placeholder="blank = auto-discover · or 192.168.1.103"
+              placeholderTextColor="#555"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+
+            <TouchableOpacity
+              style={[s.btnSmall, { marginTop: 12, borderColor: '#58C95F' }]}
+              onPress={handleSaveEdgeHost}
+            >
+              <MaterialCommunityIcons name="content-save-outline" size={15} color="#58C95F" />
+              <Text style={[s.btnSmallText, { color: '#58C95F' }]}>Save AGRI-PC Address</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* ══════════════════════════════════════════
               Online Camera Streaming (tunnel + TURN)
           ══════════════════════════════════════════ */}

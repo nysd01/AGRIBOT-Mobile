@@ -41,7 +41,10 @@ sync agent:  Postgres(synced=false) ──► Supabase          (when internet u
    CREATE DATABASE agribot_edge OWNER agribot;
    ```
    (Tables are created automatically from `schema.sql` on first run.)
-4. **Mosquitto** (local MQTT broker) — <https://mosquitto.org/download/>. Run it on `:1883`.
+4. **Mosquitto** (local MQTT broker) — <https://mosquitto.org/download/>. Run it with the
+   provided **`mosquitto.conf`** (`mosquitto -c mosquitto.conf -v`), which opens **two**
+   listeners: `1883` TCP for the ESP32 and `9001` WebSocket for the phone app (the app
+   speaks MQTT-over-WebSocket and can't use raw TCP).
 
 ## Setup & run
 
