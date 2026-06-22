@@ -22,6 +22,7 @@ from .camera import MEDIA_DIR, pipeline
 from .config import settings
 from .discovery import Advertiser
 from .mqtt_ingest import MqttIngest
+from .poller import SensorPoller
 from .sync import SyncAgent
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -30,6 +31,7 @@ log = logging.getLogger("agribot.main")
 ingest = MqttIngest()
 syncer = SyncAgent()
 advertiser = Advertiser()
+poller = SensorPoller()
 
 
 @asynccontextmanager
@@ -37,12 +39,14 @@ async def lifespan(app: FastAPI):
     await db.init_pool()
     ingest.start()
     syncer.start()
+    poller.start()
     await advertiser.start()
     log.info("AGRI-PC edge hub up on %s:%s", settings.host, settings.port)
     try:
         yield
     finally:
         await advertiser.stop()
+        poller.stop()
         syncer.stop()
         ingest.stop()
         await webrtc.close_all()

@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     mqtt_sensors_topic: str = "agribot/sensors"
     mqtt_cmd_topic: str = "agribot/motors/cmd"  # face-follow pan/tilt + manual-priority watch
 
+    # ESP32-Sensors HTTP poller → local DB (empty host disables it)
+    esp_sensors_host: str = "192.168.4.1"
+    sensors_poll_interval_s: int = 5
+
     # Supabase sync
     supabase_url: str = ""
     supabase_service_key: str = ""
