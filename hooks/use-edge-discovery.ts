@@ -24,6 +24,8 @@ const SERVICE_TYPE = 'agribot-edge';
 const PROTOCOL = 'tcp';
 const DOMAIN = 'local.';
 
+const isIpv4 = (h: string) => /^\d{1,3}(\.\d{1,3}){3}$/.test(h);
+
 export function useEdgeDiscovery(enabled = true) {
   const [service, setService] = useState<EdgeService | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -41,16 +43,20 @@ export function useEdgeDiscovery(enabled = true) {
     const onResolved = (svc: any) => {
       const addrs: string[] = svc?.addresses ?? [];
       const ipv4 = addrs.find((a) => a.includes('.') && !a.includes(':'));
-      // Require a stable IPv4 and de-dupe: returning the same object when nothing
-      // changed avoids re-rendering consumers (and re-creating the WebRTC peer)
-      // every time mDNS re-resolves the same service.
-      if (!ipv4) return;
+      // Prefer a stable IPv4; fall back to the .local hostname if that's all mDNS
+      // gives us (some devices report no address record, only the host name).
+      const candidate = ipv4 ?? (svc?.host ? String(svc.host).replace(/\.$/, '') : undefined);
+      if (!candidate) return;
       const port = svc?.port ?? 8000;
-      setService((prev) =>
-        prev && prev.host === ipv4 && prev.port === port
-          ? prev
-          : { host: ipv4, port, name: svc?.name ?? 'AGRI-PC' },
-      );
+      setService((prev) => {
+        if (!prev) return { host: candidate, port, name: svc?.name ?? 'AGRI-PC' };
+        // Upgrade hostname -> IPv4 once; otherwise keep the SAME object so the
+        // WebRTC peer isn't torn down and re-created on every mDNS re-resolve.
+        if (ipv4 && prev.host !== ipv4 && !isIpv4(prev.host)) {
+          return { host: ipv4, port, name: prev.name };
+        }
+        return prev;
+      });
     };
 
     zc.on('resolved', onResolved);

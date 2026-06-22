@@ -44,12 +44,13 @@ export const RemoteCameraFeed = React.memo(function RemoteCameraFeed({
 
   const iceServers = useMemo<IceServer[]>(() => {
     const list: IceServer[] = [STUN];
-    if (isOnlineMode && streamConfig?.turnUrl?.trim()) {
-      list.push({
-        urls: streamConfig.turnUrl.trim(),
-        username: streamConfig.turnUsername || undefined,
-        credential: streamConfig.turnPassword || undefined,
-      });
+    const turn = streamConfig?.turnUrl?.trim();
+    const user = streamConfig?.turnUsername?.trim();
+    const cred = streamConfig?.turnPassword;
+    // TURN requires BOTH credentials — an entry with missing/undefined creds makes
+    // the native RTCPeerConnection fail to initialize. Only add it when complete.
+    if (isOnlineMode && turn && user && cred) {
+      list.push({ urls: turn, username: user, credential: cred });
     }
     return list;
   }, [isOnlineMode, streamConfig?.turnUrl, streamConfig?.turnUsername, streamConfig?.turnPassword]);
