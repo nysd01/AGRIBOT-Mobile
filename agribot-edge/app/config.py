@@ -36,8 +36,10 @@ class Settings(BaseSettings):
     mqtt_sensors_topic: str = "agribot/sensors"
     mqtt_cmd_topic: str = "agribot/motors/cmd"  # face-follow pan/tilt + manual-priority watch
 
-    # ESP32-Sensors HTTP poller → local DB (empty host disables it)
-    esp_sensors_host: str = "192.168.4.1"
+    # ESP32-Sensors HTTP poller → local DB (empty host disables it).
+    # Firmware advertises mDNS "agribot-sensors.local" — use that so DHCP IP changes
+    # don't matter. Fall back to 192.168.4.1 (its AP IP) if mDNS won't resolve.
+    esp_sensors_host: str = "agribot-sensors.local"
     sensors_poll_interval_s: int = 5
 
     # Supabase sync
