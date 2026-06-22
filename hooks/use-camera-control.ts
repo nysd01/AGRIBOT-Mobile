@@ -7,6 +7,7 @@
 
 import { useCallback, useState } from 'react';
 import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 
 export const MEDIA_DIR = `${FileSystem.documentDirectory}agribot-media`;
 
@@ -27,6 +28,23 @@ export async function downloadCapture(baseUrl: string, name: string): Promise<st
     return res.uri;
   } catch {
     return null;
+  }
+}
+
+/** Save a local file into the phone's gallery (Photos), in an "AGRIBOT" album. */
+export async function saveToGallery(localUri: string): Promise<boolean> {
+  try {
+    const perm = await MediaLibrary.requestPermissionsAsync();
+    if (!perm.granted) return false;
+    const asset = await MediaLibrary.createAssetAsync(localUri);
+    try {
+      const album = await MediaLibrary.getAlbumAsync('AGRIBOT');
+      if (album) await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+      else await MediaLibrary.createAlbumAsync('AGRIBOT', asset, false);
+    } catch { /* album is best-effort */ }
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -68,8 +86,9 @@ export function useCameraControl(baseUrl: string | null) {
     setBusy(true);
     const r = await post('/capture/photo');
     if (r?.file && baseUrl) {
-      await downloadCapture(baseUrl, r.file);
-      flash('📸 Photo saved');
+      const uri = await downloadCapture(baseUrl, r.file);
+      if (uri) await saveToGallery(uri);
+      flash('📸 Saved to gallery');
     }
     setBusy(false);
   }, [post, baseUrl, flash]);
@@ -86,8 +105,9 @@ export function useCameraControl(baseUrl: string | null) {
       const r = await post('/record/stop');
       setRecording(false);
       if (r?.file && baseUrl) {
-        await downloadCapture(baseUrl, r.file);
-        flash('🎥 Video saved');
+        const uri = await downloadCapture(baseUrl, r.file);
+        if (uri) await saveToGallery(uri);
+        flash('🎥 Saved to gallery');
       }
       setBusy(false);
     }

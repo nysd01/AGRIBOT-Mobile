@@ -78,6 +78,14 @@
           "cameraPermission": "AGRIBOT displays the robot's camera; your phone camera is not used for the live feed.",
           "microphonePermission": "AGRIBOT plays the robot's microphone audio."
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "AGRIBOT saves photos captured from the robot camera to your gallery.",
+          "savePhotosPermission": "AGRIBOT saves photos and videos captured from the robot camera to your gallery.",
+          "isAccessMediaLocationEnabled": true
+        }
       ]
     ],
     "experiments": {
