@@ -4,12 +4,13 @@
  * Flow (matches agribot-edge POST /offer, which uses aiortc / no trickle ICE):
  *   1. create a recvonly peer connection
  *   2. make an SDP offer, wait for ICE gathering to finish
- *   3. POST {sdp,type} → http://<host>:8000/offer
+ *   3. POST {sdp,type} → <signalingUrl>/offer
  *   4. apply the SDP answer; the inbound MediaStream arrives via the 'track' event
  *
- * Works the same online and offline — only the ICE servers differ. Offline (LAN)
- * needs STUN only; online (remote/CGNAT) will also need a TURN server (added later
- * from settings).
+ * The caller supplies both the signaling base URL and the ICE servers, so the
+ * same hook serves both modes:
+ *   • OFFLINE → signalingUrl = http://<AGRI-PC LAN IP>:8000, ICE = [STUN]
+ *   • ONLINE  → signalingUrl = <public tunnel URL>,          ICE = [STUN, TURN]
  *
  * Native only (react-native-webrtc). Web uses RemoteCameraFeed.web.tsx.
  */
@@ -19,23 +20,31 @@ import { RTCPeerConnection, RTCSessionDescription, type MediaStream } from 'reac
 
 export type FeedStatus = 'idle' | 'connecting' | 'connected' | 'failed';
 
-const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+export interface IceServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
 const ICE_GATHER_TIMEOUT_MS = 3000;
 
-export function useWebrtcFeed(host: string | null, port = 8000) {
+export function useWebrtcFeed(signalingUrl: string | null, iceServers: IceServer[]) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [status, setStatus] = useState<FeedStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
 
+  // Re-run when the URL or the ICE set actually changes (not on every render).
+  const iceKey = JSON.stringify(iceServers);
+
   useEffect(() => {
-    if (!host) {
+    if (!signalingUrl) {
       setStatus('idle');
       return;
     }
 
     let cancelled = false;
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers });
     pcRef.current = pc;
     setStatus('connecting');
     setError(null);
@@ -76,7 +85,8 @@ export function useWebrtcFeed(host: string | null, port = 8000) {
         await waitForIce();
         if (cancelled) return;
 
-        const res = await fetch(`http://${host}:${port}/offer`, {
+        const base = signalingUrl.replace(/\/+$/, ''); // tolerate trailing slash
+        const res = await fetch(`${base}/offer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -103,7 +113,8 @@ export function useWebrtcFeed(host: string | null, port = 8000) {
       setStream(null);
       setStatus('idle');
     };
-  }, [host, port]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signalingUrl, iceKey]);
 
   return { stream, status, error };
 }

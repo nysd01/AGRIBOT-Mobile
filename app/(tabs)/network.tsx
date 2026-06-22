@@ -45,7 +45,7 @@ export default function WifiConnectionScreen() {
   const { espIP: globalEspIP, setEspIP: setGlobalEspIP, resetToAP } = useESP32IP();
 
   // Online / Offline mode + cloud config + MQTT
-  const { mode, setMode, cloudConfig, setCloudConfig, clearCloud, isOnline, isOnlineMode, mqttConfig, setMqttConfig } = useAppMode();
+  const { mode, setMode, cloudConfig, setCloudConfig, clearCloud, isOnline, isOnlineMode, mqttConfig, setMqttConfig, streamConfig, setStreamConfig } = useAppMode();
 
   // Live MQTT connection status (online mode only)
   const { mqttConnected, publishCmd } = useMqtt();
@@ -78,6 +78,13 @@ export default function WifiConnectionScreen() {
   const [showCloudKey,  setShowCloudKey]  = useState(false);
   const [savingCloud,   setSavingCloud]   = useState(false);
   const [sendingCloud,  setSendingCloud]  = useState(false);
+
+  // Online camera streaming config form state (tunnel URL + TURN)
+  const [streamUrl,    setStreamUrl]    = useState(streamConfig?.onlineUrl    ?? '');
+  const [turnUrl,      setTurnUrl]      = useState(streamConfig?.turnUrl      ?? '');
+  const [turnUser,     setTurnUser]     = useState(streamConfig?.turnUsername ?? '');
+  const [turnPass,     setTurnPass]     = useState(streamConfig?.turnPassword ?? '');
+  const [showTurnPass, setShowTurnPass] = useState(false);
 
   const {
     networks: savedNetworks,
@@ -420,6 +427,16 @@ export default function WifiConnectionScreen() {
       useTls:      mqttTls,
     });
     Alert.alert('MQTT Saved ✓', `App will use MQTT for online motor commands.\n\nBroker: ${mqttHost}\nTopic: ${mqttPrefix}/motors/cmd`);
+  };
+
+  const handleSaveStream = () => {
+    setStreamConfig({
+      onlineUrl:    streamUrl.trim(),
+      turnUrl:      turnUrl.trim(),
+      turnUsername: turnUser.trim(),
+      turnPassword: turnPass,
+    });
+    Alert.alert('Streaming Saved ✓', 'Online camera will use this tunnel + TURN relay.');
   };
 
   /** Fill the form fields from a saved network */
@@ -1142,6 +1159,98 @@ export default function WifiConnectionScreen() {
               <MaterialCommunityIcons name="lightbulb-outline" size={13} color="#F59E0B" />
               <Text style={[s.hintText, { color: '#92700A' }]}>
                 Free broker: <Text style={{ color: '#F59E0B' }}>broker.hivemq.com</Text> — no signup needed. For private use, create a free cluster at hivemq.com/mqtt-cloud.
+              </Text>
+            </View>
+          </View>
+
+          {/* ══════════════════════════════════════════
+              Online / Offline Mode
+          ══════════════════════════════════════════ */}
+          {/* ══════════════════════════════════════════
+              Online Camera Streaming (tunnel + TURN)
+          ══════════════════════════════════════════ */}
+          <View style={s.card}>
+            <View style={s.cardTitleRow}>
+              <MaterialCommunityIcons name="video-wireless-outline" size={16} color="#4A9AFF" />
+              <Text style={s.cardTitle}>Online Camera (Streaming)</Text>
+              {streamConfig?.onlineUrl ? (
+                <View style={[s.badge, s.badgeGreen, { marginLeft: 'auto' }]}>
+                  <MaterialCommunityIcons name="check" size={12} color="#58C95F" />
+                  <Text style={[s.badgeText, { color: '#58C95F' }]}>Set</Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={[s.modeInfoBox, { borderColor: '#4A9AFF44' }]}>
+              <MaterialCommunityIcons name="information-outline" size={14} color="#4A9AFF" />
+              <Text style={s.modeInfoText}>
+                For watching the camera in Online mode (away from the robot). Needs a public tunnel to AGRI-PC and a TURN relay. Offline mode finds AGRI-PC automatically and ignores these.
+              </Text>
+            </View>
+
+            <Text style={s.fieldLabel}>Tunnel URL (AGRI-PC :8000)</Text>
+            <TextInput
+              style={s.input}
+              value={streamUrl}
+              onChangeText={setStreamUrl}
+              placeholder="https://xxxx.ngrok-free.app"
+              placeholderTextColor="#555"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+
+            <Text style={[s.fieldLabel, { marginTop: 12 }]}>TURN URL</Text>
+            <TextInput
+              style={s.input}
+              value={turnUrl}
+              onChangeText={setTurnUrl}
+              placeholder="turn:relay.metered.ca:80"
+              placeholderTextColor="#555"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <Text style={[s.fieldLabel, { marginTop: 12 }]}>TURN Username</Text>
+            <TextInput
+              style={s.input}
+              value={turnUser}
+              onChangeText={setTurnUser}
+              placeholder="from your TURN provider"
+              placeholderTextColor="#555"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <Text style={[s.fieldLabel, { marginTop: 12 }]}>TURN Password</Text>
+            <View style={s.inputRow}>
+              <TextInput
+                style={[s.input, { flex: 1 }]}
+                value={turnPass}
+                onChangeText={setTurnPass}
+                placeholder="from your TURN provider"
+                placeholderTextColor="#555"
+                secureTextEntry={!showTurnPass}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity style={s.eyeBtn} onPress={() => setShowTurnPass(v => !v)}>
+                <MaterialCommunityIcons name={showTurnPass ? 'eye-off-outline' : 'eye-outline'} size={18} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[s.btnSmall, { marginTop: 14, borderColor: '#4A9AFF' }]}
+              onPress={handleSaveStream}
+            >
+              <MaterialCommunityIcons name="content-save-outline" size={15} color="#4A9AFF" />
+              <Text style={[s.btnSmallText, { color: '#4A9AFF' }]}>Save Streaming Config</Text>
+            </TouchableOpacity>
+
+            <View style={s.hintBox}>
+              <MaterialCommunityIcons name="lightbulb-outline" size={13} color="#4A9AFF" />
+              <Text style={[s.hintText, { color: '#2E5C99' }]}>
+                On AGRI-PC: run a tunnel (e.g. ngrok http 8000) and set the same TURN in .env. Free TURN: metered.ca.
               </Text>
             </View>
           </View>

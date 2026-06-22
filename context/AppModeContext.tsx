@@ -70,6 +70,15 @@ export const DEFAULT_MQTT_CONFIG: MqttConfig = {
   useTls:      true,
 };
 
+export interface StreamConfig {
+  /** Public signaling base URL for ONLINE camera (tunnel to AGRI-PC :8000), e.g. https://abc.ngrok-free.app */
+  onlineUrl:    string;
+  /** TURN relay — required for online/CGNAT. Empty = STUN only (LAN/offline). */
+  turnUrl:      string;
+  turnUsername: string;
+  turnPassword: string;
+}
+
 export interface AppModeContextValue {
   mode:            AppMode;
   setMode:         (mode: AppMode) => void;
@@ -82,6 +91,9 @@ export interface AppModeContextValue {
   /** AGRI-PC host (IP or hostname) for offline edge endpoints — manual override of mDNS discovery */
   edgeHost:        string | null;
   setEdgeHost:     (host: string | null) => void;
+  /** Online camera streaming config (tunnel URL + TURN) */
+  streamConfig:    StreamConfig | null;
+  setStreamConfig: (cfg: StreamConfig) => void;
   /** true when mode === 'online' AND serverUrl is set */
   isOnline:        boolean;
   /** true when mode === 'online', regardless of cloud config — use for MQTT/motor-command routing */
@@ -95,7 +107,8 @@ export interface AppModeContextValue {
 const KEY_MODE  = 'agribot_app_mode';
 const KEY_CLOUD = 'agribot_cloud_config';
 const KEY_MQTT  = 'agribot_mqtt_config';
-const KEY_EDGE  = 'agribot_edge_host';
+const KEY_EDGE   = 'agribot_edge_host';
+const KEY_STREAM = 'agribot_stream_config';
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +123,8 @@ const AppModeContext = createContext<AppModeContextValue>({
   clearMqtt:      () => {},
   edgeHost:       null,
   setEdgeHost:    () => {},
+  streamConfig:   null,
+  setStreamConfig: () => {},
   isOnline:       false,
   isOnlineMode:   false,
   ready:          false,
@@ -122,6 +137,7 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
   const [cloud, setCloudState] = useState<CloudConfig | null>(null);
   const [mqtt,  setMqttState]  = useState<MqttConfig | null>(null);
   const [edge,  setEdgeState]  = useState<string | null>(null);
+  const [streamCfg, setStreamCfgState] = useState<StreamConfig | null>(null);
   const [ready, setReady]      = useState(false);
 
   useEffect(() => {
@@ -130,7 +146,8 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
       storage.getItem(KEY_CLOUD),
       storage.getItem(KEY_MQTT),
       storage.getItem(KEY_EDGE),
-    ]).then(([savedMode, savedCloud, savedMqtt, savedEdge]) => {
+      storage.getItem(KEY_STREAM),
+    ]).then(([savedMode, savedCloud, savedMqtt, savedEdge, savedStream]) => {
       if (savedCloud) {
         try { setCloudState(JSON.parse(savedCloud) as CloudConfig); } catch {}
       }
@@ -138,6 +155,9 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
         try { setMqttState(JSON.parse(savedMqtt) as MqttConfig); } catch {}
       }
       if (savedEdge) setEdgeState(savedEdge);
+      if (savedStream) {
+        try { setStreamCfgState(JSON.parse(savedStream) as StreamConfig); } catch {}
+      }
 
       if (Platform.OS === 'web') {
         if (!savedCloud) setCloudState(WEB_DEFAULT_CLOUD);
@@ -182,6 +202,11 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
     else storage.removeItem(KEY_EDGE).catch(() => {});
   }, []);
 
+  const setStreamConfig = useCallback((cfg: StreamConfig) => {
+    setStreamCfgState(cfg);
+    storage.setItem(KEY_STREAM, JSON.stringify(cfg)).catch(() => {});
+  }, []);
+
   const isOnline = Platform.OS === 'web'
     ? !!cloud?.serverUrl
     : mode === 'online' && !!cloud?.serverUrl;
@@ -195,6 +220,7 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
         cloudConfig: cloud, setCloudConfig, clearCloud,
         mqttConfig: mqtt, setMqttConfig, clearMqtt,
         edgeHost: edge, setEdgeHost,
+        streamConfig: streamCfg, setStreamConfig,
         isOnline, isOnlineMode, ready,
       }}
     >
