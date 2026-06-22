@@ -61,7 +61,10 @@ async def _ensure_media() -> tuple[object | None, object | None]:
                 _video_player = MediaPlayer(
                     f"video={settings.video_device}",
                     format=settings.media_format,
-                    options={"framerate": "30", "video_size": "640x480"},
+                    options={
+                        "framerate": str(settings.video_framerate),
+                        "video_size": f"{settings.video_width}x{settings.video_height}",
+                    },
                 )
             except Exception as exc:  # bad device name / camera busy
                 log.warning("camera open failed (%s): %s", settings.video_device, exc)

@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     audio_device: str = "Microphone Array"
     media_format: str = "dshow"
 
+    # Stream tuning — lower = less to encode/relay/buffer = lower latency (good for
+    # driving over a remote/TURN path). Bump back up when on the LAN if you want.
+    video_width: int = 640
+    video_height: int = 360
+    video_framerate: int = 20
+
     # WebRTC ICE
     stun_url: str = "stun:stun.l.google.com:19302"
     turn_url: str = ""
