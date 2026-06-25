@@ -15,12 +15,15 @@
       },
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "AGRIBOT discovers the AGRI-PC edge hub on your local network to stream the robot camera.",
-        "NSBonjourServices": ["_agribot-edge._tcp"]
+        "NSBonjourServices": [
+          "_agribot-edge._tcp"
+        ]
       }
     },
     "android": {
-      "usesCleartextTraffic": true,
-      "permissions": ["android.permission.CHANGE_WIFI_MULTICAST_STATE"],
+      "permissions": [
+        "android.permission.CHANGE_WIFI_MULTICAST_STATE"
+      ],
       "config": {
         "googleMaps": {
           "apiKey": "PASTE_YOUR_KEY_HERE"
@@ -68,7 +71,10 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": false,
-          "modes": ["peripheral", "central"],
+          "modes": [
+            "peripheral",
+            "central"
+          ],
           "bluetoothAlwaysPermission": "Allow AGRIBOT to connect to the AGRIBOT-MOTORS robot over Bluetooth for offline remote control."
         }
       ],
@@ -85,6 +91,14 @@
           "photosPermission": "AGRIBOT saves photos captured from the robot camera to your gallery.",
           "savePhotosPermission": "AGRIBOT saves photos and videos captured from the robot camera to your gallery.",
           "isAccessMediaLocationEnabled": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ]
     ],
