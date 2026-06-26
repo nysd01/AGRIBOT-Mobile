@@ -619,7 +619,7 @@ export default function RemoteScreen() {
 
         {/* HUD */}
         <View style={lsStyles.hud}>
-          {gpsData && (
+          {gpsData?.lat != null && (
             <View style={lsStyles.hudItem}>
               <Text style={lsStyles.hudLabel}>LAT / LNG</Text>
               <Text style={[lsStyles.hudValue, { color: '#72F88A', fontSize: 10 }]}>
@@ -824,7 +824,7 @@ export default function RemoteScreen() {
                       <Text style={[autoStyles.logText, { color: '#FF8C42' }]}>Flame detected</Text>
                     </View>
                   )}
-                  {gpsData && (
+                  {gpsData?.lat != null && (
                     <View style={autoStyles.logRow}>
                       <MaterialCommunityIcons name="crosshairs-gps" size={14} color="#58C95F" />
                       <Text style={autoStyles.logText}>
@@ -879,7 +879,7 @@ export default function RemoteScreen() {
                 </View>
               </View>
               <Text style={[remoteStyles.currentActionLabel, { marginBottom: 8 }]}>
-                {gpsData
+                {gpsData?.lat != null
                   ? `GPS: ${gpsData.lat.toFixed(5)}, ${gpsData.lng.toFixed(5)} • ${gpsTrail.length} pts`
                   : 'Waiting for GPS fix…'}
               </Text>
