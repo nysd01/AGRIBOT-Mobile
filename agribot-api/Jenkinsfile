@@ -82,8 +82,10 @@ pipeline {
                 dir("${APP_DIR}") {
                     // Deploy an isolated CI stack (own project + own port) so it never
                     // collides with the demo stack the marker sees on the default port.
+                    // Only api + db (not prometheus/grafana) so CI doesn't collide with
+                    // the demo stack's monitoring ports. db has no host port → no conflict.
                     sh '''
-                        API_PORT=${CI_PORT} docker compose -p ${CI_PROJECT} up -d --build
+                        API_PORT=${CI_PORT} docker compose -p ${CI_PROJECT} up -d --build api db
                     '''
                 }
             }
