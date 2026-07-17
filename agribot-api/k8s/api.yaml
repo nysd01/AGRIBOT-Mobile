@@ -1,0 +1,81 @@
+# AGRIBOT API: config + Deployment (rolling updates + probes) + Service (NodePort) + HPA (scaling).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: agribot
+data:
+  # Reaches Postgres by its Service name — Kubernetes service discovery.
+  DATABASE_URL: postgresql://agribot:agribot@postgres:5432/agribot
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agribot-api
+  namespace: agribot
+  labels: { app: agribot-api }
+spec:
+  replicas: 2
+  strategy:                     # ── rolling updates: no downtime on new versions ──
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels: { app: agribot-api }
+  template:
+    metadata:
+      labels: { app: agribot-api }
+    spec:
+      containers:
+        - name: api
+          image: agribot-api:latest
+          imagePullPolicy: IfNotPresent   # use the image imported into k3s (built locally)
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef: { name: api-config }
+          readinessProbe:               # don't send traffic until /health is OK
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:                # restart if it stops responding (self-healing)
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:                    # requests power the HPA autoscaling
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agribot-api
+  namespace: agribot
+spec:
+  type: NodePort
+  selector: { app: agribot-api }
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080        # exposed on the node at :30080
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agribot-api-hpa
+  namespace: agribot
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agribot-api
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:                     # ── scaling: add pods when CPU > 70% ──
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
