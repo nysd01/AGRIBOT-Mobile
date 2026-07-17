@@ -1,0 +1,250 @@
+================================================================================
+ AGRIBOT PROJECT - ALL COMMANDS CHEAT SHEET
+ Software Architecture Exam (SEN3244) - Spring 2026
+ VPS: 38.242.246.126   |   Repo: https://github.com/nysd01/AGRIBOT-Mobile.git
+================================================================================
+
+ QUICK PORT MAP (memorize these):
+   18080  -> API (Docker compose)          http://localhost:18080/docs
+   8443   -> API via Nginx HTTPS proxy      https://38.242.246.126:8443/docs
+   30080  -> API on Kubernetes (k3s)        http://localhost:30080/health
+   13000  -> Grafana                        http://38.242.246.126:13000  (admin/admin)
+   19090  -> Prometheus                     http://38.242.246.126:19090
+   8080   -> Jenkins                        http://38.242.246.126:8080
+   18090  -> CI test stack (temporary, only during a Jenkins build)
+
+================================================================================
+ 0. CONNECT TO THE VPS
+================================================================================
+ssh root@38.242.246.126
+# then enter the password when asked
+
+================================================================================
+ 1. GIT (get latest code onto the VPS)
+================================================================================
+cd ~/AGRIBOT-Mobile
+git pull
+git status
+git log --oneline -10
+
+================================================================================
+ 2. DOCKER (compose stack: api + db + prometheus + grafana)
+================================================================================
+cd ~/AGRIBOT-Mobile/agribot-api
+
+# start / rebuild everything
+docker compose up -d --build
+
+# start just one service
+docker compose up -d --build api
+docker compose up -d grafana
+
+# see what is running (and the ports)
+docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}"
+
+# logs
+docker compose logs -f api
+docker compose logs --tail 50 api
+
+# restart / stop
+docker compose restart api
+docker compose down            # stop the whole stack
+docker kill agribot-api-api-1  # hard-kill (for the self-heal demo, restarts itself)
+
+================================================================================
+ 3. TEST THE API (all should work)
+================================================================================
+# health
+curl -s http://localhost:18080/health
+
+# send ONE sensor reading (expect HTTP 201)
+curl -s http://localhost:18080/readings -X POST -H "Content-Type: application/json" \
+  -d '{"device_id":"AGRIBOT-SENSORS","temperature":25,"humidity":60,"soil_moisture":40,"smoke_raw":100,"smoke_detected":false,"flame_detected":false}'
+
+# read the latest reading back
+curl -s http://localhost:18080/readings/latest
+
+# read the history
+curl -s http://localhost:18080/readings
+
+# send 50 readings (to light up Grafana). Prints each HTTP code.
+for i in $(seq 1 50); do
+  curl -s http://localhost:18080/readings -X POST -H "Content-Type: application/json" \
+    -d '{"device_id":"AGRIBOT-SENSORS","temperature":25,"humidity":60,"soil_moisture":40,"smoke_raw":100,"smoke_detected":false,"flame_detected":false}' \
+    -o /dev/null -w "%{http_code} "
+done; echo
+
+================================================================================
+ 4. RUN THE TESTS (95% coverage)
+================================================================================
+cd ~/AGRIBOT-Mobile/agribot-api
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+pytest                 # runs all tests, enforces 80% coverage gate
+# HTML coverage report is written to htmlcov/index.html
+
+================================================================================
+ 5. KUBERNETES (k3s) - scaling, self-healing, rolling updates  [SECTION 7]
+================================================================================
+# see everything
+sudo kubectl -n agribot get pods,svc,hpa
+
+# just pods
+sudo kubectl -n agribot get pods
+
+# watch pods live (Ctrl-C to stop)
+sudo kubectl -n agribot get pods -w
+
+# ---- SELF-HEALING DEMO (teacher asks: kill it, does it restart alone?) ----
+# 1) list pods, copy a real pod name
+sudo kubectl -n agribot get pods
+# 2) delete one pod (paste the real name)
+sudo kubectl -n agribot delete pod PODNAME
+# 3) watch it come back automatically with a NEW name
+sudo kubectl -n agribot get pods -w
+# kill ALL of them at once (they all rebuild):
+sudo kubectl -n agribot delete pods --all
+
+# ---- ZERO-DOWNTIME PROOF (run in a 2nd terminal while deleting a pod) ----
+while true; do curl -s -o /dev/null -w "%{http_code} " http://localhost:30080/health; sleep 0.3; done
+# you keep seeing 200 200 200... even while a pod is killed
+
+# scale manually
+sudo kubectl -n agribot scale deploy/agribot-api --replicas=3
+
+# rolling update status
+sudo kubectl -n agribot rollout status deploy/agribot-api
+
+# describe / logs of a pod
+sudo kubectl -n agribot describe pod PODNAME
+sudo kubectl -n agribot logs PODNAME
+
+# (re)deploy the k8s manifests
+docker build -t agribot-api:latest ~/AGRIBOT-Mobile/agribot-api
+docker save agribot-api:latest | sudo k3s ctr images import -
+sudo kubectl apply -f ~/AGRIBOT-Mobile/agribot-api/k8s/
+
+================================================================================
+ 6. JENKINS (CI/CD)  [SECTION 3]
+================================================================================
+# service control
+sudo systemctl status jenkins
+sudo systemctl restart jenkins
+
+# get the first-time admin password
+sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+
+# let jenkins use docker (needed for the pipeline)
+sudo usermod -aG docker jenkins
+sudo systemctl restart jenkins
+
+# Jenkins UI:  http://38.242.246.126:8080
+# In the job -> "Build Now" -> watch the 6 stages -> click "Coverage Report"
+
+================================================================================
+ 7. NGINX REVERSE PROXY + TLS (port 8443)  [SECTION 1]
+================================================================================
+# install / reload
+sudo apt install -y nginx
+sudo cp ~/AGRIBOT-Mobile/agribot-api/nginx/agribot.conf /etc/nginx/sites-available/agribot.conf
+sudo ln -sf /etc/nginx/sites-available/agribot.conf /etc/nginx/sites-enabled/agribot.conf
+sudo nginx -t                 # test the config
+sudo systemctl reload nginx
+
+# make the self-signed certificate (one time)
+sudo mkdir -p /etc/nginx/ssl
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/nginx/ssl/agribot.key -out /etc/nginx/ssl/agribot.crt \
+  -subj "/CN=38.242.246.126"
+
+# verify HTTPS (-k accepts the self-signed cert)
+curl -k https://38.242.246.126:8443/health
+curl -k https://38.242.246.126:8443/readings/latest
+
+================================================================================
+ 8. FIREWALL (ufw)  [SECTION 1]
+================================================================================
+sudo ufw status
+sudo ufw allow 8443
+sudo ufw allow 8080
+sudo ufw enable
+
+================================================================================
+ 9. ANSIBLE (Infrastructure as Code)  [SECTION 5]
+================================================================================
+cd ~/AGRIBOT-Mobile/agribot-api/ansible
+pip install ansible
+ansible-galaxy collection install community.general
+
+# provision the server (installs docker, firewall, clones repo)
+ansible-playbook -i inventory.ini playbook-provision.yml --ask-pass
+# deploy the app
+ansible-playbook -i inventory.ini playbook-deploy.yml --ask-pass
+
+================================================================================
+ 10. PROMETHEUS + GRAFANA (monitoring)  [SECTION 4]
+================================================================================
+# Grafana:     http://38.242.246.126:13000   (admin / admin)
+#   Dashboard: "AGRIBOT API - Monitoring"
+# Prometheus:  http://38.242.246.126:19090
+
+# check the API metrics directly
+curl -s http://localhost:18080/metrics | grep -i readings
+
+# check Prometheus is scraping the API (look for "health":"up")
+curl -s "http://localhost:19090/api/v1/targets" | grep -o '"health":"[a-z]*"'
+
+# restart grafana to reload the dashboard file
+docker compose up -d grafana
+docker compose restart grafana
+
+================================================================================
+ 11. ESP32 SENSOR - LIVE TEST
+================================================================================
+# The ESP32 broadcasts WiFi "AGRIBOT-ESP" (password agribot123).
+# Join it from a laptop, then:
+
+# a) give the ESP32 internet (join your router)
+curl -X POST http://192.168.4.1/wifi-config -H "Content-Type: application/json" \
+  -d '{"ssid":"YOUR_ROUTER_WIFI","password":"YOUR_ROUTER_PASSWORD"}'
+
+# b) check it got online (look for staIP in the output)
+curl http://192.168.4.1/health
+
+# c) point it at the cloud API (via the HTTPS proxy)
+curl -X POST http://192.168.4.1/cloud-config -H "Content-Type: application/json" \
+  -d '{"url":"https://38.242.246.126:8443","key":""}'
+
+# d) read its live sensors directly
+curl http://192.168.4.1/sensors
+
+# e) now LEAVE the AGRIBOT-ESP wifi (cloud posting pauses while a phone is on the AP)
+# f) on the VPS, watch real data arrive every ~10s:
+watch -n 3 'curl -sk https://38.242.246.126:8443/readings/latest'
+
+================================================================================
+ 12. FULL "IS EVERYTHING CONNECTED?" CHECK
+================================================================================
+echo "1) API:";        curl -s http://localhost:18080/health
+echo "2) API+DB:";     curl -s http://localhost:18080/readings/latest
+echo "3) Proxy+TLS:";  curl -sk https://38.242.246.126:8443/health
+echo "4) Prometheus:"; curl -s "http://localhost:19090/api/v1/targets" | grep -o '"health":"[a-z]*"'
+echo "5) K8s:";        sudo kubectl -n agribot get pods
+
+================================================================================
+ 13. SCREENSHOTS TO CAPTURE FOR THE REPORT / VIDEO
+================================================================================
+[ ] Swagger over HTTPS:   https://38.242.246.126:8443/docs
+[ ] pytest output showing 95% coverage
+[ ] Jenkins: all 6 stages green + Coverage Report page
+[ ] kubectl get pods,svc,hpa  (shows replicas + autoscaler)
+[ ] Self-heal: delete a pod, then get pods showing a NEW pod
+[ ] Grafana dashboard with the sensor-readings panel populated
+[ ] The "is everything connected?" check output (section 12)
+[ ] Ansible playbooks running (or the files)
+[ ] ufw status (firewall)
+
+================================================================================
+ END - keep this file handy during your demo.
+================================================================================
