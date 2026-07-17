@@ -1,0 +1,50 @@
+# Local full stack: API + PostgreSQL + Prometheus + Grafana.
+#   docker compose up --build
+#   API      http://localhost:8000/docs
+#   Metrics  http://localhost:8000/metrics
+#   Prom     http://localhost:9090
+#   Grafana  http://localhost:3000   (admin / admin)
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://agribot:agribot@db:5432/agribot
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: agribot
+      POSTGRES_PASSWORD: agribot
+      POSTGRES_DB: agribot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  pgdata:
