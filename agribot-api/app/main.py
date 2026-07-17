@@ -44,6 +44,8 @@ def health() -> dict:
 
 
 @app.post("/readings", response_model=models.ReadingOut, status_code=201, tags=["readings"])
+@app.post("/api/readings", response_model=models.ReadingOut, status_code=201,
+          tags=["readings"], include_in_schema=False)  # alias the ESP32 firmware POSTs to
 def create_reading(reading: models.ReadingIn, db: Session = Depends(get_db)):
     """Ingest one sensor reading (called by the ESP32-Sensor)."""
     row = models.SensorReading(**reading.model_dump())
