@@ -47,13 +47,22 @@ pipeline {
             post {
                 always {
                     junit "${APP_DIR}/report.xml"
-                    // HTML coverage report (from pytest.ini --cov-report=html)
-                    publishHTML(target: [
-                        reportDir: "${APP_DIR}/htmlcov",
-                        reportFiles: 'index.html',
-                        reportName: 'Coverage Report',
-                        keepAll: true, alwaysLinkToLastBuild: true, allowMissing: true
-                    ])
+                    // Always keep the coverage report as a build artifact (no plugin needed).
+                    archiveArtifacts artifacts: "${APP_DIR}/htmlcov/**", allowEmptyArchive: true
+                    // Nicely rendered coverage report IF the HTML Publisher plugin is installed;
+                    // wrapped so a missing plugin can't fail the build.
+                    script {
+                        try {
+                            publishHTML(target: [
+                                reportDir: "${APP_DIR}/htmlcov",
+                                reportFiles: 'index.html',
+                                reportName: 'Coverage Report',
+                                keepAll: true, alwaysLinkToLastBuild: true, allowMissing: true
+                            ])
+                        } catch (err) {
+                            echo "HTML Publisher plugin not installed — coverage report archived as an artifact instead."
+                        }
+                    }
                 }
             }
         }
