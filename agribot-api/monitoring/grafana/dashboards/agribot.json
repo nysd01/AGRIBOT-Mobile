@@ -53,6 +53,39 @@
           "legendFormat": "in progress"
         }
       ]
+    },
+    {
+      "id": 5,
+      "title": "🌱 Sensor readings ingested (ESP32 → API, req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 40, "lineWidth": 2 },
+          "color": { "mode": "fixed", "fixedColor": "green" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/(api/)?readings\", method=\"POST\"}[1m]))",
+          "legendFormat": "readings/s"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "🌱 Total readings ingested",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "green" } }
+      },
+      "targets": [
+        {
+          "expr": "sum(http_requests_total{handler=~\"/(api/)?readings\", method=\"POST\"})",
+          "legendFormat": "total"
+        }
+      ]
     }
   ]
 }
