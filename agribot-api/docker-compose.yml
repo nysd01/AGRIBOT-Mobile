@@ -42,6 +42,10 @@ services:
       - "${GRAFANA_PORT:-13000}:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      # Auto-provision the Prometheus datasource + AGRIBOT dashboard on startup.
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
     restart: unless-stopped

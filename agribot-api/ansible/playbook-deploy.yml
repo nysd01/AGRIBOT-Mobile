@@ -1,0 +1,39 @@
+---
+# Playbook 2 of 2 — DEPLOY the stack (pull latest, bring up containers, verify).
+# Infrastructure as Code (rubric §5). Run: ansible-playbook -i inventory.ini playbook-deploy.yml
+- name: Deploy AGRIBOT API stack
+  hosts: agribot
+  become: true
+
+  tasks:
+    - name: Pull latest code
+      git:
+        repo: "{{ repo_url }}"
+        dest: /root/AGRIBOT-Mobile
+        version: master
+        update: true
+
+    - name: Ensure .env exists (from example on first run)
+      copy:
+        src: "{{ app_dir }}/.env.example"
+        dest: "{{ app_dir }}/.env"
+        remote_src: true
+        force: false
+
+    - name: Bring up the stack (api + db + prometheus + grafana)
+      command: docker compose up -d --build
+      args:
+        chdir: "{{ app_dir }}"
+
+    - name: Wait for the API health endpoint
+      uri:
+        url: "http://localhost:18080/health"
+        status_code: 200
+      register: health
+      retries: 10
+      delay: 3
+      until: health.status == 200
+
+    - name: Report health
+      debug:
+        msg: "AGRIBOT API healthy: {{ health.json }}"

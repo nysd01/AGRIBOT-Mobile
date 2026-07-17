@@ -1,0 +1,40 @@
+---
+# Playbook 1 of 2 — PROVISION the VPS (install Docker, firewall, clone repo).
+# Infrastructure as Code (rubric §5). Run: ansible-playbook -i inventory.ini playbook-provision.yml
+- name: Provision AGRIBOT host
+  hosts: agribot
+  become: true
+
+  tasks:
+    - name: Install base packages
+      apt:
+        name: [docker.io, docker-compose-plugin, git, ufw, curl]
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker is running and enabled
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Configure firewall — allow SSH + app + monitoring ports
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: ["22", "18080", "19090", "13000", "30080"]
+
+    - name: Enable firewall (default deny incoming)
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    - name: Clone / update the AGRIBOT repository
+      git:
+        repo: "{{ repo_url }}"
+        dest: /root/AGRIBOT-Mobile
+        version: master
+        update: true
+      # If the repo already exists with local changes, this is idempotent on a clean tree.

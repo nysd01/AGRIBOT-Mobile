@@ -1,0 +1,9 @@
+# Tells Grafana to load dashboard JSON files from /var/lib/grafana/dashboards.
+apiVersion: 1
+providers:
+  - name: AGRIBOT
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

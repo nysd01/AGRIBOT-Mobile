@@ -1,0 +1,92 @@
+// AGRIBOT API — CI/CD pipeline (rubric §3, 10 marks)
+// Stages: Checkout -> Install -> Test(80% gate) -> Build image -> Deploy -> Smoke test
+pipeline {
+    agent any
+
+    environment {
+        IMAGE   = 'agribot-api:latest'
+        APP_DIR = 'agribot-api'
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                echo "Building commit ${env.GIT_COMMIT ?: 'local'}"
+            }
+        }
+
+        stage('Install deps') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh '''
+                        python3 -m venv .venv
+                        . .venv/bin/activate
+                        pip install --upgrade pip
+                        pip install -r requirements.txt
+                    '''
+                }
+            }
+        }
+
+        stage('Test (80% coverage gate)') {
+            steps {
+                dir("${APP_DIR}") {
+                    // pytest.ini enforces --cov-fail-under=80; build fails if coverage drops.
+                    sh '''
+                        . .venv/bin/activate
+                        pytest --junitxml=report.xml
+                    '''
+                }
+            }
+            post {
+                always {
+                    junit "${APP_DIR}/report.xml"
+                    // HTML coverage report (from pytest.ini --cov-report=html)
+                    publishHTML(target: [
+                        reportDir: "${APP_DIR}/htmlcov",
+                        reportFiles: 'index.html',
+                        reportName: 'Coverage Report',
+                        keepAll: true, alwaysLinkToLastBuild: true, allowMissing: true
+                    ])
+                }
+            }
+        }
+
+        stage('Build image') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'docker build -t ${IMAGE} .'
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                dir("${APP_DIR}") {
+                    // Rolling deploy to the running docker-compose stack.
+                    sh 'docker compose up -d --no-deps --build api'
+                }
+            }
+        }
+
+        stage('Smoke test') {
+            steps {
+                sh '''
+                    sleep 5
+                    curl -fsS http://localhost:${API_PORT:-18080}/health
+                '''
+            }
+        }
+    }
+
+    post {
+        success { echo '✅ Pipeline green — tested, built, deployed.' }
+        failure { echo '❌ Pipeline failed — check the failing stage above.' }
+    }
+}
