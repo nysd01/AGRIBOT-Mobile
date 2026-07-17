@@ -4,8 +4,10 @@ pipeline {
     agent any
 
     environment {
-        IMAGE   = 'agribot-api:latest'
-        APP_DIR = 'agribot-api'
+        IMAGE     = 'agribot-api:latest'
+        APP_DIR   = 'agribot-api'
+        CI_PROJECT = 'agribot-ci'   // isolated compose project for CI (won't touch the demo stack)
+        CI_PORT   = '18090'          // dedicated host port for the CI deploy
     }
 
     options {
@@ -78,17 +80,24 @@ pipeline {
         stage('Deploy') {
             steps {
                 dir("${APP_DIR}") {
-                    // Rolling deploy to the running docker-compose stack.
-                    sh 'docker compose up -d --no-deps --build api'
+                    // Deploy an isolated CI stack (own project + own port) so it never
+                    // collides with the demo stack the marker sees on the default port.
+                    sh '''
+                        API_PORT=${CI_PORT} docker compose -p ${CI_PROJECT} up -d --build
+                    '''
                 }
             }
         }
 
         stage('Smoke test') {
             steps {
+                // Retry: Postgres needs a few seconds before the API's first boot succeeds.
                 sh '''
-                    sleep 5
-                    curl -fsS http://localhost:${API_PORT:-18080}/health
+                    for i in $(seq 1 10); do
+                        curl -fsS http://localhost:${CI_PORT}/health && exit 0
+                        echo "waiting for API... ($i)"; sleep 3
+                    done
+                    echo "API did not become healthy in time"; exit 1
                 '''
             }
         }
