@@ -495,6 +495,30 @@ String buildCloudPostUrl() {
     : base + "/api/readings";
 }
 
+// Self-hosted VPS API — each reading is ALSO posted here, IN ADDITION to Supabase
+// (dual-write). This lets the project's own backend + Grafana receive live hardware
+// data while the mobile app keeps reading from Supabase. Set to "" to disable.
+const char* SECONDARY_API_URL = "https://38.242.246.126:8443/api/readings";
+
+void postToSecondary(const String& body) {
+  if (strlen(SECONDARY_API_URL) == 0) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  WiFiClientSecure client;
+  client.setInsecure();               // accept the VPS self-signed certificate
+  HTTPClient http;
+  http.setTimeout(4000);
+  if (!http.begin(client, SECONDARY_API_URL)) {
+    Serial.println(F("[Cloud2] begin() failed"));
+    return;
+  }
+  http.addHeader("Content-Type", "application/json");
+  int code = http.POST(body);
+  Serial.printf("[Cloud2] VPS API POST HTTP %d\n", code);
+  http.end();
+  client.stop();                      // free TLS fd immediately
+}
+
 void postToCloud() {
   if (cloudUrl.length() == 0) return;
   if (WiFi.status() != WL_CONNECTED) return;
@@ -543,6 +567,9 @@ void postToCloud() {
   Serial.printf("[Cloud] POST HTTP %d\n", code);
   http.end();
   client.stop();  // free TLS fd immediately
+
+  // Dual-write: also send the same reading to the self-hosted VPS API.
+  postToSecondary(body);
 }
 
 /**
